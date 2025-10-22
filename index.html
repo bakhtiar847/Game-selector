@@ -25,7 +25,23 @@
   <header>
     <svg width="36" height="36" viewBox="0 0 24 24" fill="none" aria-hidden><rect width="24" height="24" rx="6" fill="#052938"></rect><path d="M6 8h12v2H6zM6 12h12v2H6z" fill="#5eead4"/></svg>
     <h1>Game Selector</h1>
+    <div id="userBox" style="margin-left:auto;display:flex;align-items:center;gap:8px">
+      <span id="username-display" style="color:var(--muted);font-size:13px"></span>
+      <button id="change-username" class="open" style="padding:6px 10px">Change</button>
+    </div>
   </header>
+
+  <!-- Username modal -->
+  <div id="username-modal" style="display:none;position:fixed;inset:0;background:rgba(2,6,23,0.7);backdrop-filter:blur(4px);align-items:center;justify-content:center;z-index:60">
+    <div style="background:var(--card);padding:20px;border-radius:12px;max-width:420px;width:90%;box-shadow:0 10px 40px rgba(2,6,23,0.7)">
+      <h2 style="margin:0 0 8px 0">Welcome</h2>
+      <p style="margin:0 0 12px;color:var(--muted)">Enter a display name that will be passed to games and saved for offline use.</p>
+      <div style="display:flex;gap:8px">
+        <input id="username-input" placeholder="Your name" style="flex:1;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit">
+        <button id="save-username" class="play">Save</button>
+      </div>
+    </div>
+  </div>
 
   <main id="list">
     <div class="empty">Loading games…</div>
@@ -69,7 +85,7 @@
       // immediately null out opener to avoid giving the new window a reference
       // back to this page.
       const w = window.open('', '_blank', 'width=900,height=700');
-      if(!w) {
+  if(!w) {
         // Popup blocked — fall back to an in-page preview using an iframe.
         const preview = document.createElement('div');
         preview.className = 'card';
@@ -81,17 +97,20 @@
       }
       try{ w.opener = null; } catch(e) { /* ignore if cross-origin restrictions apply */ }
       const doc = w.document;
+      // inject username as a global variable into the game's document so games can read window.GAME_USERNAME
+      const username = getUsername();
+      const injectedPrefix = username ? `<script>window.GAME_USERNAME = ${JSON.stringify(username)};<\/script>` : '';
       if(showSource){
         // show a page with the source html and an iframe to run it
         const escaped = game.content.replace(/</g, '&lt;').replace(/>/g, '&gt;');
         doc.open();
-        doc.write(`<!doctype html><html><head><meta charset=\"utf-8\"><title>${escapeHtml(game.name)} — Source</title><style>body{font-family:system-ui,Arial;padding:18px;background:#071023;color:#cfeef0}pre{background:#01121b;padding:12px;border-radius:8px;overflow:auto;max-height:60vh}</style></head><body><h1>${escapeHtml(game.name)}</h1><p>${escapeHtml(game.description||'')}</p><h2>Source</h2><pre>${escaped}</pre><h2>Preview</h2><iframe style=\"width:100%;height:40vh;border:1px solid rgba(255,255,255,0.06)\" srcdoc=\"${escapeAttribute(game.content)}\"></iframe></body></html>`);
+        doc.write(`<!doctype html><html><head><meta charset=\"utf-8\"><title>${escapeHtml(game.name)} — Source</title><style>body{font-family:system-ui,Arial;padding:18px;background:#071023;color:#cfeef0}pre{background:#01121b;padding:12px;border-radius:8px;overflow:auto;max-height:60vh}</style></head><body><h1>${escapeHtml(game.name)}</h1><p>${escapeHtml(game.description||'')}</p><h2>Source</h2><pre>${escaped}</pre><h2>Preview</h2><iframe style=\"width:100%;height:40vh;border:1px solid rgba(255,255,255,0.06)\" srcdoc=\"${escapeAttribute(injectedPrefix + game.content)}\"></iframe></body></html>`);
         doc.close();
         return;
       }
 
       doc.open();
-      doc.write(game.content || '<!doctype html><meta charset="utf-8"><body><p>No content provided.</p></body>');
+      doc.write(injectedPrefix + (game.content || '<!doctype html><meta charset="utf-8"><body><p>No content provided.</p></body>'));
       doc.close();
     }
 
@@ -115,6 +134,63 @@
       // release the object URL after a short timeout
       setTimeout(()=>URL.revokeObjectURL(url), 5000);
     }
+
+    // --- username / cookie helpers ---
+    function setCookie(name, value, days){
+      let s = `${encodeURIComponent(name)}=${encodeURIComponent(value)}`;
+      if(days){
+        const d = new Date(); d.setTime(d.getTime() + days*24*60*60*1000);
+        s += `; expires=${d.toUTCString()}`;
+      }
+      s += '; path=/';
+      document.cookie = s;
+    }
+
+    function getCookie(name){
+      const re = new RegExp('(?:^|; )' + name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '=([^;]*)');
+      const m = document.cookie.match(re);
+      return m ? decodeURIComponent(m[1]) : null;
+    }
+
+    function setUsername(name){
+      try{
+        // prefer cookie for portability; also keep a copy in localStorage
+        setCookie('gs_username', name, 365);
+        localStorage.setItem('gs_username', name);
+      }catch(e){
+        console.warn('Could not persist username to cookie/localStorage', e);
+      }
+      updateUsernameDisplay();
+    }
+
+    function getUsername(){
+      return getCookie('gs_username') || localStorage.getItem('gs_username') || '';
+    }
+
+    function updateUsernameDisplay(){
+      const el = document.getElementById('username-display');
+      const name = getUsername();
+      el.textContent = name ? `Hello, ${name}` : '';
+    }
+
+    // modal wiring
+    (function(){
+      const modal = document.getElementById('username-modal');
+      const input = document.getElementById('username-input');
+      const save = document.getElementById('save-username');
+      const change = document.getElementById('change-username');
+
+      change.addEventListener('click', ()=>{ input.value = getUsername() || ''; modal.style.display = 'flex'; input.focus(); });
+      save.addEventListener('click', ()=>{ const v = (input.value||'').trim(); if(v){ setUsername(v); modal.style.display='none'; } else { alert('Please enter a name.'); } });
+
+      // show on first load if no username
+      if(!getUsername()){
+        modal.style.display = 'flex';
+        input.focus();
+      } else {
+        updateUsernameDisplay();
+      }
+    })();
 
     async function load(){
       try{
