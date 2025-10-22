@@ -39,6 +39,9 @@
       <button id="bluetooth-btn" class="open" title="Bluetooth (browser-to-browser Bluetooth is not available)">Bluetooth</button>
       <button id="open-chat" class="open">Chat</button>
       <button id="open-sample" class="play">Open Sample</button>
+      <button id="export-cookies" class="open" title="Export cookies to a JSON file">Export Cookies</button>
+      <button id="import-cookies" class="open" title="Import cookies from a JSON file">Import Cookies</button>
+      <input id="import-file" type="file" accept="application/json" style="display:none">
     </div>
   </header>
 
@@ -528,6 +531,36 @@
     }
 
     load();
+
+    // Export/Import cookies (exclude saved games prefixed with gs_game_)
+    function exportCookies(){
+      const raw = document.cookie.split('; ').filter(Boolean);
+      const obj = {};
+      raw.forEach(p=>{ const idx = p.indexOf('='); const k = decodeURIComponent(p.slice(0,idx)); const v = decodeURIComponent(p.slice(idx+1)||''); if(!k.startsWith('gs_game_')) obj[k]=v; });
+      const blob = new Blob([JSON.stringify(obj, null, 2)], {type: 'application/json'});
+      const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href=url; a.download='cookies.json'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),5000);
+    }
+
+    function importCookiesFromFile(file){
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        try{
+          const obj = JSON.parse(reader.result);
+          for(const k of Object.keys(obj||{})){
+            // write cookie for each key (30 days)
+            document.cookie = encodeURIComponent(k)+'='+encodeURIComponent(String(obj[k]))+'; path=/; max-age='+(30*24*60*60);
+          }
+          alert('Imported cookies. Reload the page to apply any saved games.');
+        }catch(e){ alert('Failed to parse JSON: '+e.message); }
+      };
+      reader.readAsText(file);
+    }
+
+    document.getElementById('export-cookies').addEventListener('click', exportCookies);
+    const importBtn = document.getElementById('import-cookies');
+    const fileInput = document.getElementById('import-file');
+    importBtn.addEventListener('click', ()=> fileInput.click());
+    fileInput.addEventListener('change', (e)=>{ const f = e.target.files && e.target.files[0]; if(f) importCookiesFromFile(f); });
   </script>
 </body>
 </html>
