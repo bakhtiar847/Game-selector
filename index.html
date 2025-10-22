@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Game Selector</title>
+  <style>
+    :root{--bg:#0f1720;--card:#0b1220;--accent:#5eead4;--muted:#94a3b8}
+    body{margin:0;font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial; background:linear-gradient(180deg,#071023 0%,var(--bg) 100%);color:#e6eef6;min-height:100vh;display:flex;flex-direction:column}
+    header{padding:28px 32px;border-bottom:1px solid rgba(255,255,255,0.03);display:flex;align-items:center;gap:16px}
+    h1{margin:0;font-size:20px}
+    main{padding:28px;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:20px;align-items:start}
+    .card{background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border:1px solid rgba(255,255,255,0.03);padding:18px;border-radius:12px;box-shadow:0 6px 18px rgba(2,6,23,0.6)}
+    .card h3{margin:0 0 8px 0;font-size:18px}
+    .desc{color:var(--muted);font-size:14px;margin-bottom:12px}
+    .controls{display:flex;gap:8px;align-items:center}
+    button.play{background:var(--accent);color:#042;border:0;padding:8px 12px;border-radius:8px;font-weight:600;cursor:pointer}
+    button.open{background:transparent;color:var(--accent);border:1px solid rgba(94,234,212,0.12);padding:6px 10px;border-radius:8px;cursor:pointer}
+    .empty{color:var(--muted);grid-column:1/-1;text-align:center;padding:40px}
+    footer{margin-top:auto;padding:18px 28px;color:var(--muted);font-size:13px}
+    @media (max-width:520px){main{padding:16px;grid-template-columns:1fr}header{padding:18px}}
+  </style>
+</head>
+<body>
+  <header>
+    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" aria-hidden><rect width="24" height="24" rx="6" fill="#052938"></rect><path d="M6 8h12v2H6zM6 12h12v2H6z" fill="#5eead4"/></svg>
+    <h1>Game Selector</h1>
+  </header>
+
+  <main id="list">
+    <div class="empty">Loading games…</div>
+  </main>
+
+  <footer>Games loaded from <code>gamelist.json</code>. Click Play to open the game in a new window.</footer>
+
+  <script>
+    // Contract:
+    // - Input: GET /gamelist.json (array of {id,name,description,content})
+    // - Output: Rendered card elements with Play buttons opening a new window showing the game's HTML content
+    // - Errors: graceful message if fetch fails or JSON is empty
+
+    const listEl = document.getElementById('list');
+
+    function createCard(game){
+      const wrap = document.createElement('div');
+      wrap.className = 'card';
+
+      const h = document.createElement('h3'); h.textContent = game.name; wrap.appendChild(h);
+      const p = document.createElement('div'); p.className = 'desc'; p.textContent = game.description || '';
+      wrap.appendChild(p);
+
+      const controls = document.createElement('div'); controls.className = 'controls';
+      const play = document.createElement('button'); play.className = 'play'; play.textContent = 'Play';
+      play.addEventListener('click', ()=>openGameWindow(game));
+      const openNew = document.createElement('button'); openNew.className='open'; openNew.textContent='Open source';
+      openNew.addEventListener('click', ()=>openGameWindow(game, true));
+      controls.appendChild(play); controls.appendChild(openNew);
+      wrap.appendChild(controls);
+
+      return wrap;
+    }
+
+    function openGameWindow(game, showSource=false){
+      // open a new window and write the content. include a small header when showSource is true.
+      const w = window.open('', '_blank', 'noopener,noreferrer,width=900,height=700');
+      if(!w) { alert('Popup blocked. Allow popups for this page to play games.'); return; }
+      const doc = w.document;
+      if(showSource){
+        // show a page with the source html and an iframe to run it
+        const escaped = game.content.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        doc.open();
+        doc.write(`<!doctype html><html><head><meta charset=\"utf-8\"><title>${escapeHtml(game.name)} — Source</title><style>body{font-family:system-ui,Arial;padding:18px;background:#071023;color:#cfeef0}pre{background:#01121b;padding:12px;border-radius:8px;overflow:auto;max-height:60vh}</style></head><body><h1>${escapeHtml(game.name)}</h1><p>${escapeHtml(game.description||'')}</p><h2>Source</h2><pre>${escaped}</pre><h2>Preview</h2><iframe style=\"width:100%;height:40vh;border:1px solid rgba(255,255,255,0.06)\" srcdoc=\"${escapeAttribute(game.content)}\"></iframe></body></html>`);
+        doc.close();
+        return;
+      }
+
+      doc.open();
+      doc.write(game.content || '<!doctype html><meta charset="utf-8"><body><p>No content provided.</p></body>');
+      doc.close();
+    }
+
+    function escapeHtml(s){ return (s||'').replace(/[&<>\"]/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' })[c]); }
+    function escapeAttribute(s){ return (s||'').replace(/&/g,'&amp;').replace(/\"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    async function load(){
+      try{
+        const res = await fetch('gamelist.json', {cache: 'no-store'});
+        if(!res.ok) throw new Error('HTTP '+res.status);
+        const arr = await res.json();
+        listEl.innerHTML = '';
+        if(!Array.isArray(arr) || arr.length===0){
+          listEl.innerHTML = '<div class="empty">No games found in <code>gamelist.json</code>.</div>';
+          return;
+        }
+        arr.forEach(game=>{
+          const card = createCard(game);
+          listEl.appendChild(card);
+        });
+      }catch(err){
+        listEl.innerHTML = `<div class="empty">Failed to load games: ${escapeHtml(err.message||String(err))}</div>`;
+        console.error(err);
+      }
+    }
+
+    load();
+  </script>
+</body>
+</html>

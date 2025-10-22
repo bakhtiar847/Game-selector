@@ -1,0 +1,14 @@
+[
+  {
+    "id": "game-1",
+    "name": "Bouncing Ball",
+    "description": "A tiny demo where a ball bounces inside the canvas.",
+    "content": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Bouncing Ball</title><style>body{margin:0;display:flex;align-items:center;justify-content:center;height:100vh;background:#111;color:#fff}canvas{border:1px solid #333}</style></head><body><canvas id=\"c\"></canvas><script>const c=document.getElementById('c');const ctx=c.getContext('2d');function resize(){c.width=innerWidth*0.8;c.height=innerHeight*0.8}addEventListener('resize',resize);resize();let x=c.width/2,y=c.height/2,dx=3,dy=2,r=20;function frame(){ctx.clearRect(0,0,c.width,c.height);ctx.beginPath();ctx.fillStyle='#ff6';ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();x+=dx;y+=dy;if(x+r>c.width||x-r<0)dx=-dx;if(y+r>c.height||y-r<0)dy=-dy;requestAnimationFrame(frame)}frame();</script></body></html>"
+  },
+  {
+    "id": "game-2",
+    "name": "Click Counter",
+    "description": "A minimal game that counts clicks — press the button to increase score.",
+    "content": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Click Counter</title><style>body{font-family:Arial,Helvetica,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0b3a2e;color:#e6fff3}#box{background:rgba(255,255,255,0.06);padding:30px;border-radius:12px;text-align:center}button{font-size:18px;padding:10px 20px;border-radius:8px;border:0;background:#1fb27a;color:#012}</style></head><body><div id=\"box\"><h1>Score: <span id=\"score\">0</span></h1><button id=\"btn\">Click me</button></div><script>let s=0;document.getElementById('btn').addEventListener('click',()=>{s++;document.getElementById('score').textContent=s;});</script></body></html>"
+  }
+]
