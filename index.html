@@ -369,8 +369,51 @@
       const signalOut = document.getElementById('signal-out');
       const signalIn = document.getElementById('signal-in');
       const signalCopy = document.getElementById('signal-copy');
+      const signalSendBt = document.createElement('button'); signalSendBt.className='open'; signalSendBt.textContent='Send via Bluetooth';
+      signalCopy.parentNode.insertBefore(signalSendBt, signalCopy.nextSibling);
       const signalAccept = document.getElementById('signal-accept');
       const signalClose = document.getElementById('signal-close');
+
+      // Bluetooth state
+      let btDevice = null, btServer = null, btWriteChar = null, btNotifyChar = null;
+      const NUS_SERVICE = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+      const NUS_TX = '6e400002-b5a3-f393-e0a9-e50e24dcca9e'; // write
+      const NUS_RX = '6e400003-b5a3-f393-e0a9-e50e24dcca9e'; // notify
+
+      async function startBluetoothSignaling(){
+        if(!navigator.bluetooth){ alert('Web Bluetooth not supported in this browser.'); return; }
+        try{
+          btDevice = await navigator.bluetooth.requestDevice({filters:[], optionalServices:[NUS_SERVICE]});
+          btServer = await btDevice.gatt.connect();
+          const service = await btServer.getPrimaryService(NUS_SERVICE);
+          try{ btWriteChar = await service.getCharacteristic(NUS_TX); }catch(e){ btWriteChar = null; }
+          try{ btNotifyChar = await service.getCharacteristic(NUS_RX); }catch(e){ btNotifyChar = null; }
+          if(btNotifyChar){
+            await btNotifyChar.startNotifications();
+            btNotifyChar.addEventListener('characteristicvaluechanged', e=>{
+              const v = e.target.value; const decoder = new TextDecoder(); const txt = decoder.decode(v);
+              // paste into signal-in for user to accept
+              signalIn.value = txt;
+              alert('Received signaling data via Bluetooth (pasted into Remote box). Click Accept to process.');
+            });
+          }
+          alert('Bluetooth device connected for signaling. Use the Signal modal to copy/send text via Bluetooth.');
+        }catch(err){ console.error(err); alert('Bluetooth connection failed: '+err.message); }
+      }
+
+      async function writeToBluetooth(text){
+        if(!btWriteChar && !btNotifyChar){ alert('No writable Bluetooth characteristic available. Connect first.'); return; }
+        try{
+          const encoder = new TextEncoder();
+          const data = encoder.encode(text);
+          // some devices use TX for writes, others use the RX characteristic; try both
+          if(btWriteChar){ await btWriteChar.writeValue(data); }
+          else if(btNotifyChar){ await btNotifyChar.writeValueWithResponse ? await btNotifyChar.writeValueWithResponse(data) : await btNotifyChar.writeValue(data); }
+          alert('Sent via Bluetooth');
+        }catch(err){ console.error(err); alert('Bluetooth write failed: '+err.message); }
+      }
+
+      signalSendBt.addEventListener('click', ()=>{ if(!btDevice) startBluetoothSignaling().then(()=>writeToBluetooth(signalOut.value)).catch(e=>console.error(e)); else writeToBluetooth(signalOut.value); });
 
       hostBtn.addEventListener('click', async ()=>{
         signalModal.style.display='flex';
@@ -382,7 +425,7 @@
 
       joinBtn.addEventListener('click', ()=>{ signalModal.style.display='flex'; signalOut.value='Paste answer after accepting remote offer into the right box and click Accept.'; });
 
-      bluetoothBtn.addEventListener('click', ()=>{ alert('Direct browser-to-browser Bluetooth hosting is not supported. Use Host/Join manual signaling or a central server.'); });
+  bluetoothBtn.addEventListener('click', ()=>{ startBluetoothSignaling(); });
 
       signalCopy.addEventListener('click', ()=>{ signalOut.select(); document.execCommand('copy'); alert('Copied'); });
       signalClose.addEventListener('click', ()=>{ signalModal.style.display='none'; });
@@ -406,6 +449,8 @@
           alert('Provide an offer in the left box (host) or paste remote offer and click Accept to create an answer.');
         }catch(e){ alert('Signaling error: '+e.message); }
       });
+      // expose a manual entry point for other UI (bluetooth button)
+      window.startBluetoothSignaling = startBluetoothSignaling;
     })();
 
     // Chat handling
