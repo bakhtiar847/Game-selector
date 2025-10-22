@@ -13,7 +13,8 @@
     .card{background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border:1px solid rgba(255,255,255,0.03);padding:18px;border-radius:12px;box-shadow:0 6px 18px rgba(2,6,23,0.6)}
     .card h3{margin:0 0 8px 0;font-size:18px}
     .desc{color:var(--muted);font-size:14px;margin-bottom:12px}
-    .controls{display:flex;gap:8px;align-items:center}
+  .controls{display:flex;gap:8px;align-items:center}
+  .badge-saved{background:#052b22;color:#9ff3d9;padding:4px 8px;border-radius:999px;font-size:12px;font-weight:600;margin-left:8px}
     button.play{background:var(--accent);color:#042;border:0;padding:8px 12px;border-radius:8px;font-weight:600;cursor:pointer}
     button.open{background:transparent;color:var(--accent);border:1px solid rgba(94,234,212,0.12);padding:6px 10px;border-radius:8px;cursor:pointer}
     .empty{color:var(--muted);grid-column:1/-1;text-align:center;padding:40px}
@@ -63,6 +64,14 @@
 
       const h = document.createElement('h3'); h.textContent = game.name; wrap.appendChild(h);
       const p = document.createElement('div'); p.className = 'desc'; p.textContent = game.description || '';
+      // if a saved version exists in cookie/localStorage, load it and mark the card
+      const saved = loadSavedGame(game.id);
+      if(saved){
+        // replace content so Play uses the saved offline version
+        game.content = saved;
+        const badge = document.createElement('span'); badge.className = 'badge-saved'; badge.textContent = 'Saved offline';
+        h.appendChild(badge);
+      }
       wrap.appendChild(p);
 
   const controls = document.createElement('div'); controls.className = 'controls';
@@ -72,7 +81,9 @@
   openNew.addEventListener('click', ()=>openGameWindow(game, true));
   const dl = document.createElement('button'); dl.className='open'; dl.textContent='Download';
   dl.addEventListener('click', ()=>downloadGame(game));
-  controls.appendChild(play); controls.appendChild(openNew); controls.appendChild(dl);
+  const saveCookieBtn = document.createElement('button'); saveCookieBtn.className='open'; saveCookieBtn.textContent='Save (cookie)';
+  saveCookieBtn.addEventListener('click', ()=>saveGameToCookie(game));
+  controls.appendChild(play); controls.appendChild(openNew); controls.appendChild(dl); controls.appendChild(saveCookieBtn);
       wrap.appendChild(controls);
 
       return wrap;
@@ -191,6 +202,38 @@
         updateUsernameDisplay();
       }
     })();
+
+    // Save game HTML to cookie if small enough, otherwise fall back to localStorage.
+    function saveGameToCookie(game){
+      const key = `gs_game_${game.id}`;
+      const payload = game.content || '';
+      // rough safe cookie size limit (per-cookie) — browsers vary; use 4000 bytes as safe cap
+      const encoder = new TextEncoder();
+      const bytes = encoder.encode(payload).length;
+      if(bytes <= 4000){
+        try{
+          setCookie(key, payload, 365);
+          alert(`Saved to cookie as ${key} (${bytes} bytes)`);
+          return;
+        }catch(e){
+          console.warn('cookie set failed', e);
+        }
+      }
+      // fallback to localStorage
+      try{
+        localStorage.setItem(key, payload);
+        alert(`Saved to localStorage as ${key} (${bytes} bytes). Cookie was too small.`);
+      }catch(e){
+        alert('Failed to save game: storage unavailable or payload too large.');
+        console.error(e);
+      }
+    }
+
+    // load saved game (from cookie or localStorage)
+    function loadSavedGame(id){
+      const key = `gs_game_${id}`;
+      return getCookie(key) || localStorage.getItem(key) || null;
+    }
 
     async function load(){
       try{
