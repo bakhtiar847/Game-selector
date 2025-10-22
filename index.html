@@ -30,6 +30,13 @@
       <span id="username-display" style="color:var(--muted);font-size:13px"></span>
       <button id="change-username" class="open" style="padding:6px 10px">Change</button>
     </div>
+    <div id="multiplayerBox" style="margin-left:12px;display:flex;align-items:center;gap:8px">
+      <button id="host-btn" class="open" title="Host (manual WebRTC)">Host</button>
+      <button id="join-btn" class="open" title="Join (manual WebRTC)">Join</button>
+      <button id="bluetooth-btn" class="open" title="Bluetooth (browser-to-browser Bluetooth is not available)">Bluetooth</button>
+      <button id="open-chat" class="open">Chat</button>
+      <button id="open-sample" class="play">Open Sample</button>
+    </div>
   </header>
 
   <!-- Username modal -->
@@ -47,6 +54,60 @@
   <main id="list">
     <div class="empty">Loading games…</div>
   </main>
+
+  <!-- Signaling modal for manual offer/answer exchange -->
+  <div id="signal-modal" style="display:none;position:fixed;inset:0;background:rgba(2,6,23,0.7);align-items:center;justify-content:center;z-index:70">
+    <div style="background:var(--card);padding:18px;border-radius:12px;max-width:760px;width:92%">
+      <h3 style="margin:0 0 8px 0">Connection signaling (manual)</h3>
+      <div style="display:flex;gap:8px">
+        <textarea id="signal-out" rows="6" style="flex:1;padding:8px;background:#00121a;color:#cfeef0;border-radius:8px;border:1px solid rgba(255,255,255,0.03)"></textarea>
+        <textarea id="signal-in" rows="6" placeholder="Paste remote answer/offer here" style="flex:1;padding:8px;background:#00121a;color:#cfeef0;border-radius:8px;border:1px solid rgba(255,255,255,0.03)"></textarea>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end">
+        <button id="signal-copy" class="open">Copy Out</button>
+        <button id="signal-accept" class="play">Accept Remote</button>
+        <button id="signal-close" class="open">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chat modal -->
+  <div id="chat-modal" style="display:none;position:fixed;right:18px;bottom:18px;width:320px;z-index:80">
+    <div style="background:var(--card);border-radius:12px;overflow:hidden;box-shadow:0 10px 40px rgba(2,6,23,0.6)">
+      <div style="padding:10px;border-bottom:1px solid rgba(255,255,255,0.03);display:flex;align-items:center;justify-content:space-between">
+        <strong style="font-size:14px">Chat</strong>
+        <button id="close-chat" class="open">Close</button>
+      </div>
+      <div id="chat-messages" style="height:260px;overflow:auto;padding:10px;background:linear-gradient(180deg,rgba(0,0,0,0.02),transparent)"></div>
+      <div style="display:flex;padding:8px;gap:8px;border-top:1px solid rgba(255,255,255,0.03)">
+        <input id="chat-input" placeholder="Message" style="flex:1;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.03);background:transparent;color:inherit">
+        <button id="chat-send" class="play">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sample multiplayer game modal -->
+  <div id="sample-modal" style="display:none;position:fixed;inset:0;align-items:center;justify-content:center;z-index:85;background:rgba(2,6,23,0.6)">
+    <div style="background:var(--card);padding:18px;border-radius:12px;max-width:720px;width:94%;box-shadow:0 12px 48px rgba(2,6,23,0.6);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h3 style="margin:0">Sample Multiplayer — Button Race</h3>
+        <div>
+          <button id="close-sample" class="open">Close</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:20px;align-items:center">
+        <div style="flex:1;text-align:center">
+          <h4>Your score</h4>
+          <div id="local-score" style="font-size:48px">0</div>
+          <button id="hit-btn" class="play" style="margin-top:10px">Hit</button>
+        </div>
+        <div style="flex:1;text-align:center">
+          <h4>Opponent score</h4>
+          <div id="remote-score" style="font-size:48px">0</div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <footer>Games loaded from <code>gamelist.json</code>. Click Play to open the game in a new window.</footer>
 
@@ -234,6 +295,152 @@
       const key = `gs_game_${id}`;
       return getCookie(key) || localStorage.getItem(key) || null;
     }
+
+    // --- WebRTC/manual-signaling connection manager (data channel) ---
+    const ConnectionManager = (function(){
+      let pc = null; let dc = null; let isHost = false;
+
+      async function createPeer(){
+        pc = new RTCPeerConnection();
+        pc.onicecandidate = e => {
+          // ICE candidates will be included in the SDP we copy; nothing special here
+        };
+        pc.ondatachannel = ev => {
+          dc = ev.channel;
+          setupDataChannel(dc);
+        };
+        return pc;
+      }
+
+      function setupDataChannel(channel){
+        channel.onopen = ()=>{ appendChatMessage('System', 'Data channel open'); };
+        channel.onclose = ()=>{ appendChatMessage('System', 'Data channel closed'); };
+        channel.onmessage = ev => {
+          try{
+            const msg = JSON.parse(ev.data);
+            if(msg.type === 'chat') appendChatMessage(msg.name||'Peer', msg.text);
+            if(msg.type === 'score') updateRemoteScore(msg.value);
+          }catch(e){ console.log('raw message', ev.data); }
+        };
+      }
+
+      async function host(){
+        isHost = true;
+        await createPeer();
+        dc = pc.createDataChannel('game');
+        setupDataChannel(dc);
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        // return full SDP to present to the other peer
+        return JSON.stringify(pc.localDescription);
+      }
+
+      async function joinWithOffer(offerSdp){
+        isHost = false;
+        await createPeer();
+        const offer = JSON.parse(offerSdp);
+        await pc.setRemoteDescription(offer);
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        return JSON.stringify(pc.localDescription);
+      }
+
+      async function acceptAnswer(answerSdp){
+        const answer = JSON.parse(answerSdp);
+        await pc.setRemoteDescription(answer);
+      }
+
+      function send(obj){ if(dc && dc.readyState === 'open') dc.send(JSON.stringify(obj)); }
+
+      return { host, joinWithOffer, acceptAnswer, send };
+    })();
+
+    // UI wiring for connection buttons and signaling modal
+    (function(){
+      const hostBtn = document.getElementById('host-btn');
+      const joinBtn = document.getElementById('join-btn');
+      const bluetoothBtn = document.getElementById('bluetooth-btn');
+      const signalModal = document.getElementById('signal-modal');
+      const signalOut = document.getElementById('signal-out');
+      const signalIn = document.getElementById('signal-in');
+      const signalCopy = document.getElementById('signal-copy');
+      const signalAccept = document.getElementById('signal-accept');
+      const signalClose = document.getElementById('signal-close');
+
+      hostBtn.addEventListener('click', async ()=>{
+        signalModal.style.display='flex';
+        try{
+          const s = await ConnectionManager.host();
+          signalOut.value = s;
+        }catch(e){ alert('Failed to create host: '+e.message); }
+      });
+
+      joinBtn.addEventListener('click', ()=>{ signalModal.style.display='flex'; signalOut.value='Paste answer after accepting remote offer into the right box and click Accept.'; });
+
+      bluetoothBtn.addEventListener('click', ()=>{ alert('Direct browser-to-browser Bluetooth hosting is not supported. Use Host/Join manual signaling or a central server.'); });
+
+      signalCopy.addEventListener('click', ()=>{ signalOut.select(); document.execCommand('copy'); alert('Copied'); });
+      signalClose.addEventListener('click', ()=>{ signalModal.style.display='none'; });
+      signalAccept.addEventListener('click', async ()=>{
+        const left = signalOut.value.trim();
+        const right = signalIn.value.trim();
+        try{
+          // if we are the joiner and left is offer, we should generate answer
+          if(left && !right){
+            const answer = await ConnectionManager.joinWithOffer(left);
+            signalOut.value = answer;
+            alert('Created answer: copy and send to host');
+            return;
+          }
+          if(right && left){
+            // host accepts answer
+            await ConnectionManager.acceptAnswer(right);
+            alert('Connection attempted — check chat for status');
+            return;
+          }
+          alert('Provide an offer in the left box (host) or paste remote offer and click Accept to create an answer.');
+        }catch(e){ alert('Signaling error: '+e.message); }
+      });
+    })();
+
+    // Chat handling
+    function appendChatMessage(name, text){
+      const box = document.getElementById('chat-messages');
+      const el = document.createElement('div');
+      el.style.marginBottom='8px';
+      el.innerHTML = `<strong style="display:block">${escapeHtml(name)}</strong><div>${escapeHtml(text)}</div>`;
+      box.appendChild(el); box.scrollTop = box.scrollHeight;
+    }
+
+    (function(){
+      const openChat = document.getElementById('open-chat');
+      const chatModal = document.getElementById('chat-modal');
+      const closeChat = document.getElementById('close-chat');
+      const chatSend = document.getElementById('chat-send');
+      const chatInput = document.getElementById('chat-input');
+
+      openChat.addEventListener('click', ()=>{ chatModal.style.display='block'; });
+      closeChat.addEventListener('click', ()=>{ chatModal.style.display='none'; });
+      chatSend.addEventListener('click', ()=>{ const t = chatInput.value.trim(); if(!t) return; appendChatMessage(getUsername()||'Me', t); ConnectionManager.send({type:'chat', name:getUsername(), text:t}); chatInput.value=''; });
+    })();
+
+    // Sample game wiring
+    (function(){
+      const openSample = document.getElementById('open-sample');
+      const sampleModal = document.getElementById('sample-modal');
+      const closeSample = document.getElementById('close-sample');
+      const hitBtn = document.getElementById('hit-btn');
+      const localScoreEl = document.getElementById('local-score');
+      const remoteScoreEl = document.getElementById('remote-score');
+      let localScore = 0; let remoteScore = 0;
+
+      function updateRemoteScore(v){ remoteScore = v; remoteScoreEl.textContent = remoteScore; }
+      window.updateRemoteScore = updateRemoteScore; // expose for datachannel handler
+
+      openSample.addEventListener('click', ()=>{ sampleModal.style.display='flex'; });
+      closeSample.addEventListener('click', ()=>{ sampleModal.style.display='none'; });
+      hitBtn.addEventListener('click', ()=>{ localScore++; localScoreEl.textContent = localScore; ConnectionManager.send({type:'score', value: localScore}); });
+    })();
 
     async function load(){
       try{
