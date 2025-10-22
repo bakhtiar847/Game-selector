@@ -49,12 +49,14 @@
       const p = document.createElement('div'); p.className = 'desc'; p.textContent = game.description || '';
       wrap.appendChild(p);
 
-      const controls = document.createElement('div'); controls.className = 'controls';
-      const play = document.createElement('button'); play.className = 'play'; play.textContent = 'Play';
-      play.addEventListener('click', ()=>openGameWindow(game));
-      const openNew = document.createElement('button'); openNew.className='open'; openNew.textContent='Open source';
-      openNew.addEventListener('click', ()=>openGameWindow(game, true));
-      controls.appendChild(play); controls.appendChild(openNew);
+  const controls = document.createElement('div'); controls.className = 'controls';
+  const play = document.createElement('button'); play.className = 'play'; play.textContent = 'Play';
+  play.addEventListener('click', ()=>openGameWindow(game));
+  const openNew = document.createElement('button'); openNew.className='open'; openNew.textContent='Open source';
+  openNew.addEventListener('click', ()=>openGameWindow(game, true));
+  const dl = document.createElement('button'); dl.className='open'; dl.textContent='Download';
+  dl.addEventListener('click', ()=>downloadGame(game));
+  controls.appendChild(play); controls.appendChild(openNew); controls.appendChild(dl);
       wrap.appendChild(controls);
 
       return wrap;
@@ -95,6 +97,24 @@
 
     function escapeHtml(s){ return (s||'').replace(/[&<>\"]/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' })[c]); }
     function escapeAttribute(s){ return (s||'').replace(/&/g,'&amp;').replace(/\"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    // Trigger a download of the game's HTML content as a .html file
+    function safeFilename(name){
+      return (name||'game').toLowerCase().replace(/[^a-z0-9-_]+/g,'-').replace(/^-+|-+$/g,'') || 'game';
+    }
+
+    function downloadGame(game){
+      const blob = new Blob([game.content || '<!doctype html><meta charset="utf-8"><body><p>No content provided.</p></body>'], {type: 'text/html'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = safeFilename(game.name) + '.html';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // release the object URL after a short timeout
+      setTimeout(()=>URL.revokeObjectURL(url), 5000);
+    }
 
     async function load(){
       try{
