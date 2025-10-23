@@ -22,7 +22,7 @@
     "name": "Color Swap",
     "description": "Tap to change the background color and match the target.",
     "content": "<!doctype html><html><head><meta charset=\"utf-8\"><title>Color Swap</title><style>body{margin:0;display:flex;align-items:center;justify-content:center;height:100vh;font-family:Arial;color:#00121a}#box{width:320px;height:320px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px;cursor:pointer}</style></head><body><div id=\"box\">Tap</div><script>const box=document.getElementById('box');const colors=['#ffd6a5','#fdffb6','#caffbf','#9bf6ff','#bdb2ff'];let target=0;function update(){box.style.background=colors[Math.floor(Math.random()*colors.length)];}box.addEventListener('click',()=>{box.style.background=colors[++target%colors.length];});update();</script></body></html>"
-  }
+  },
   {
     "id": "game-5",
     "name": "Tic Tac Toe",
