@@ -176,9 +176,12 @@
       }
       try{ w.opener = null; } catch(e) { /* ignore if cross-origin restrictions apply */ }
       const doc = w.document;
-      // inject username as a global variable into the game's document so games can read window.GAME_USERNAME
-      const username = getUsername();
-      const injectedPrefix = username ? `<script>window.GAME_USERNAME = ${JSON.stringify(username)};<\/script>` : '';
+  // inject username and game id as globals so games can read window.GAME_USERNAME and window.GAME_ID
+  const username = getUsername();
+  const injectedPrefixParts = [];
+  injectedPrefixParts.push(`window.GAME_ID = ${JSON.stringify(game.id)};`);
+  if(username) injectedPrefixParts.push(`window.GAME_USERNAME = ${JSON.stringify(username)};`);
+  const injectedPrefix = injectedPrefixParts.length ? `<script>${injectedPrefixParts.join('')}</script>` : '';
       if(showSource){
         // show a page with the source html and an iframe to run it
         const escaped = game.content.replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -304,6 +307,10 @@
     }
 
     // --- WebRTC/manual-signaling connection manager (data channel) ---
+    // Broadcast channel for game windows to communicate with the main page.
+    // Messages should be objects with at least {gameId, type, ...}
+    const gameBC = new BroadcastChannel('game-sync');
+
     const ConnectionManager = (function(){
       let pc = null; let dc = null; let isHost = false;
 
@@ -328,6 +335,8 @@
             if(msg.type === 'chat') appendChatMessage(msg.name||'Peer', msg.text);
             if(msg.type === 'score') updateRemoteScore(msg.value);
             if(msg.type === 'mp') handleMpMessage(msg.payload);
+            // forward all messages coming from the network to game windows via BroadcastChannel
+            try{ gameBC.postMessage(Object.assign({}, msg, {network:true})); }catch(e){/* ignore */}
           }catch(e){ console.log('raw message', ev.data); }
         };
       }
@@ -455,6 +464,16 @@
       // expose a manual entry point for other UI (bluetooth button)
       window.startBluetoothSignaling = startBluetoothSignaling;
     })();
+
+    // Forward BroadcastChannel messages from game windows to the network (if not already network-forwarded)
+    gameBC.onmessage = (ev)=>{
+      const msg = ev.data;
+      try{
+        if(msg && msg.network) return; // already from network, don't echo
+        // only forward if a data channel is available
+        try{ ConnectionManager.send(msg); }catch(e){ /* if no connection, ignore or optionally queue */ }
+      }catch(e){ console.error('gameBC onmessage', e); }
+    };
 
     // Chat handling
     function appendChatMessage(name, text){
