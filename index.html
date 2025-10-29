@@ -39,6 +39,8 @@
       <button id="bluetooth-btn" class="open" title="Bluetooth (browser-to-browser Bluetooth is not available)">Bluetooth</button>
       <button id="open-chat" class="open">Chat</button>
       <button id="open-sample" class="play">Open Sample</button>
+      <button id="downloaded-btn" class="open" title="Show downloaded games">Downloaded</button>
+      <button id="add-game-btn" class="open" title="Add a game or gamelist">Add Game</button>
       <button id="export-cookies" class="open" title="Export cookies to a JSON file">Export Cookies</button>
       <button id="import-cookies" class="open" title="Import cookies from a JSON file">Import Cookies</button>
       <input id="import-file" type="file" accept="application/json" style="display:none">
@@ -102,6 +104,49 @@
         </div>
       </div>
       <div style="display:flex;gap:20px;align-items:center">
+
+        <!-- Add / Upload modal: left = single game (file or URL), right = gamelist (file or URL) -->
+        <div id="add-modal" style="display:none;position:fixed;inset:0;background:rgba(2,6,23,0.7);align-items:center;justify-content:center;z-index:90">
+          <div style="background:var(--card);padding:18px;border-radius:12px;max-width:980px;width:96%;box-shadow:0 12px 48px rgba(2,6,23,0.6);display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div style="padding:12px;">
+              <h3 style="margin:0 0 8px 0">Add a single game</h3>
+              <p style="margin:0 0 8px;color:var(--muted)">Upload an HTML file or give a URL to an HTML page. You can save the file/URL to cookies so it appears in Downloaded games.</p>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <label style="font-size:13px">Name <input id="add-game-name" placeholder="Optional display name" style="width:100%;padding:8px;border-radius:6px"></label>
+                <label style="font-size:13px">Description <input id="add-game-desc" placeholder="Optional description" style="width:100%;padding:8px;border-radius:6px"></label>
+                <div>
+                  <input id="add-game-file" type="file" accept="text/html" />
+                </div>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <input id="add-game-url" placeholder="https://example.com/game.html" style="flex:1;padding:8px;border-radius:6px">
+                  <label style="display:flex;align-items:center;gap:6px"><input id="add-game-save-url" type="checkbox"> Save URL</label>
+                </div>
+                <div style="display:flex;gap:8px;justify-content:flex-end">
+                  <button id="add-game-cancel" class="open">Cancel</button>
+                  <button id="add-game-submit" class="play">Add Game</button>
+                </div>
+              </div>
+            </div>
+
+            <div style="padding:12px;border-left:1px solid rgba(255,255,255,0.03)">
+              <h3 style="margin:0 0 8px 0">Add a gamelist.json</h3>
+              <p style="margin:0 0 8px;color:var(--muted)">Upload a gamelist.json file or provide a URL to a gamelist.json. When added it will populate the main list. Optionally save the URL to persist across visits.</p>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <div>
+                  <input id="add-gamelist-file" type="file" accept="application/json">
+                </div>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <input id="add-gamelist-url" placeholder="https://example.com/gamelist.json" style="flex:1;padding:8px;border-radius:6px">
+                  <label style="display:flex;align-items:center;gap:6px"><input id="add-gamelist-save-url" type="checkbox"> Save URL</label>
+                </div>
+                <div style="display:flex;gap:8px;justify-content:flex-end">
+                  <button id="add-gamelist-cancel" class="open">Cancel</button>
+                  <button id="add-gamelist-submit" class="play">Add Gamelist</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
         <canvas id="mp-canvas" width="800" height="360" style="background:#02121a;border-radius:8px;width:100%;height:360px;display:block"></canvas>
       </div>
     </div>
@@ -120,6 +165,9 @@
     function createCard(game){
       const wrap = document.createElement('div');
       wrap.className = 'card';
+
+      // normalize: if gamelist entry provides a url field, treat it as content pointer
+      if(game && game.url && !game.content){ game.content = { url: game.url }; }
 
       const h = document.createElement('h3'); h.textContent = game.name; wrap.appendChild(h);
   const p = document.createElement('div'); p.className = 'desc'; p.textContent = game.description || '';
@@ -176,12 +224,23 @@
       }
       try{ w.opener = null; } catch(e) { /* ignore if cross-origin restrictions apply */ }
       const doc = w.document;
-  // inject username and game id as globals so games can read window.GAME_USERNAME and window.GAME_ID
-  const username = getUsername();
-  const injectedPrefixParts = [];
-  injectedPrefixParts.push(`window.GAME_ID = ${JSON.stringify(game.id)};`);
-  if(username) injectedPrefixParts.push(`window.GAME_USERNAME = ${JSON.stringify(username)};`);
-  const injectedPrefix = injectedPrefixParts.length ? `<script>${injectedPrefixParts.join('')}</script>` : '';
+      // inject username and game id as globals so games can read window.GAME_USERNAME and window.GAME_ID
+      const username = getUsername();
+      const injectedPrefixParts = [];
+      injectedPrefixParts.push(`window.GAME_ID = ${JSON.stringify(game.id)};`);
+      if(username) injectedPrefixParts.push(`window.GAME_USERNAME = ${JSON.stringify(username)};`);
+      const injectedPrefix = injectedPrefixParts.length ? `<script>${injectedPrefixParts.join('')}</script>` : '';
+      // If saved game is a URL (object or URL string), open the URL directly
+      if(game && game.content && (typeof game.content === 'object' && game.content.url || (typeof game.content === 'string' && game.content.startsWith('URL:')))){
+        try{
+          const url = typeof game.content === 'string' ? game.content.replace(/^URL:/,'') : game.content.url;
+          w.location.href = url;
+        }catch(e){
+          // fallback: navigate current window
+          window.open(typeof game.content === 'string' ? game.content.replace(/^URL:/,'') : game.content.url, '_blank');
+        }
+        return;
+      }
       if(showSource){
         // show a page with the source html and an iframe to run it
         const escaped = game.content.replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -263,7 +322,16 @@
       const change = document.getElementById('change-username');
 
       change.addEventListener('click', ()=>{ input.value = getUsername() || ''; modal.style.display = 'flex'; input.focus(); });
-      save.addEventListener('click', ()=>{ const v = (input.value||'').trim(); if(v){ setUsername(v); modal.style.display='none'; } else { alert('Please enter a name.'); } });
+        save.addEventListener('click', async ()=>{ const v = (input.value||'').trim(); if(!v){ alert('Please enter a name.'); return; }
+          // optional password: ask user (empty = no encryption)
+          const pass = prompt('Enter an optional password to encrypt saved data (leave empty for none):');
+          try{
+            if(pass){
+              // derive key and lock store
+              await promptPasswordAndLock(pass);
+            }
+          }catch(e){ console.error('lock failed', e); alert('Failed to enable encryption: '+e.message); }
+          setUsername(v); modal.style.display='none'; });
 
       // show on first load if no username
       if(!getUsername()){
@@ -306,6 +374,165 @@
       return getCookie(key) || localStorage.getItem(key) || null;
     }
 
+    // --- Web Crypto helpers for optional password encryption ---
+    // Uses PBKDF2 to derive an AES-GCM key from a password. Stores encrypted store under 'gs_store_encrypted'.
+    async function deriveKeyFromPassword(password, saltHex){
+      const enc = new TextEncoder();
+      const salt = saltHex ? hexToBuf(saltHex) : crypto.getRandomValues(new Uint8Array(16));
+      const pwKey = await crypto.subtle.importKey('raw', enc.encode(password), {name:'PBKDF2'}, false, ['deriveKey']);
+      const key = await crypto.subtle.deriveKey({name:'PBKDF2', salt, iterations: 200000, hash: 'SHA-256'}, pwKey, {name:'AES-GCM', length: 256}, false, ['encrypt','decrypt']);
+      return {key, salt};
+    }
+
+    function bufToHex(buf){ return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join(''); }
+    function hexToBuf(hex){ const bytes = new Uint8Array(hex.match(/.{1,2}/g).map(b=>parseInt(b,16))); return bytes; }
+
+    async function encryptWithKey(keyObj, dataStr){
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const enc = new TextEncoder();
+      const ct = await crypto.subtle.encrypt({name:'AES-GCM', iv}, keyObj, enc.encode(dataStr));
+      return { iv: bufToHex(iv), ct: bufToHex(ct) };
+    }
+
+    async function decryptWithKey(keyObj, ivHex, ctHex){
+      const iv = hexToBuf(ivHex);
+      const ct = hexToBuf(ctHex);
+      const dec = await crypto.subtle.decrypt({name:'AES-GCM', iv}, keyObj, ct);
+      return new TextDecoder().decode(dec);
+    }
+
+    // Save all gs_game_* and gs_game_meta_* and gs_gamelist* entries into encrypted bundle and remove them from clear storage
+    async function promptPasswordAndLock(password){
+      const {key, salt} = await deriveKeyFromPassword(password);
+      // store session key for runtime operations
+      window.__GS_AES_KEY = key;
+      // build a bundle
+      const bundle = {};
+      try{
+        for(let i=0;i<localStorage.length;i++){
+          const k = localStorage.key(i);
+          if(!k) continue;
+          if(k.startsWith('gs_game_') || k.startsWith('gs_game_meta_') || k.startsWith('gs_gamelist') || k==='gs_gamelist_url'){
+            bundle[k] = localStorage.getItem(k);
+            localStorage.removeItem(k);
+          }
+        }
+        // also gather cookies that start with gs_game_
+        const raw = document.cookie.split('; ').filter(Boolean);
+        for(const p of raw){ const idx = p.indexOf('='); if(idx===-1) continue; const k = decodeURIComponent(p.slice(0,idx)); const v = decodeURIComponent(p.slice(idx+1)||''); if(k.startsWith('gs_game_')){ bundle[k] = v; document.cookie = k+'=; max-age=0; path=/'; } }
+      }catch(e){ console.error('bundle build', e); }
+      const json = JSON.stringify(bundle);
+      const enc = await encryptWithKey(key, json);
+      const stored = { salt: bufToHex(salt), iv: enc.iv, ct: enc.ct };
+      localStorage.setItem('gs_store_encrypted', JSON.stringify(stored));
+      // generate certificate (key pair) and store encrypted private key
+      await generateAndStoreCertificate(key);
+      // mark that encrypted mode is active
+      localStorage.setItem('gs_encrypted_active', '1');
+      alert('Saved data encrypted for this password. You will be asked for the password to unlock on each visit.');
+    }
+
+    async function tryUnlockWithPassword(password){
+      const encBlob = localStorage.getItem('gs_store_encrypted');
+      if(!encBlob) return true; // nothing to unlock
+      const stored = JSON.parse(encBlob);
+      const {key} = await deriveKeyFromPassword(password, stored.salt);
+      window.__GS_AES_KEY = key; // keep session key
+      try{
+        const json = await decryptWithKey(key, stored.iv, stored.ct);
+        const bundle = JSON.parse(json);
+        // restore into localStorage (in memory) but do not re-create cookies unless needed
+        for(const k of Object.keys(bundle)){
+          try{ localStorage.setItem(k, bundle[k]); }catch(e){ console.error('restore key',k,e); }
+        }
+        // load and decrypt private key if present
+        await loadPrivateKeyIfEncrypted(key);
+        return true;
+      }catch(e){ console.error('unlock failed', e); return false; }
+    }
+
+    // --- certificate/keypair for signing chat messages ---
+    async function generateAndStoreCertificate(aesKey){
+      try{
+        // generate ECDSA P-256 key pair
+        const kp = await crypto.subtle.generateKey({name:'ECDSA', namedCurve:'P-256'}, true, ['sign','verify']);
+        // export pubkey as JWK
+        const pubJwk = await crypto.subtle.exportKey('jwk', kp.publicKey);
+        // export private key as JWK (so we can re-import easily) and encrypt the JSON with AES key
+        const privJwk = await crypto.subtle.exportKey('jwk', kp.privateKey);
+        const privJson = JSON.stringify(privJwk);
+        const enc = await encryptWithKey(aesKey, privJson);
+        localStorage.setItem('gs_pubkey_jwk', JSON.stringify(pubJwk));
+        localStorage.setItem('gs_priv_jwk_enc', JSON.stringify(enc));
+        // import into session for immediate use
+        const importedPriv = await crypto.subtle.importKey('jwk', privJwk, {name:'ECDSA', namedCurve:'P-256'}, false, ['sign']);
+        window.__GS_PRIV_KEY_CRYPTO = importedPriv;
+        window.__GS_PUB_JWK = pubJwk;
+        return true;
+      }catch(e){ console.error('generate cert failed', e); return false; }
+    }
+
+    async function loadPrivateKeyIfEncrypted(aesKey){
+      const enc = localStorage.getItem('gs_priv_jwk_enc');
+      if(!enc) return null;
+      try{
+        const obj = JSON.parse(enc);
+        const jwkJson = await decryptWithKey(aesKey, obj.iv, obj.ct);
+        const jwk = JSON.parse(jwkJson);
+        const priv = await crypto.subtle.importKey('jwk', jwk, {name:'ECDSA', namedCurve:'P-256'}, false, ['sign']);
+        window.__GS_PRIV_KEY_CRYPTO = priv;
+        // also load public JWK if stored
+        const pubj = localStorage.getItem('gs_pubkey_jwk'); if(pubj) try{ window.__GS_PUB_JWK = JSON.parse(pubj); }catch(e){}
+        return priv;
+      }catch(e){ console.error('load priv failed', e); }
+      return null;
+    }
+
+    // Sign a message object (returns base64 signature). Uses stored private key if available (unlocked by password), otherwise returns null.
+    async function signMessage(payload){
+      try{
+        // load private key (if stored encrypted, we need to decrypt with provided sessionKey stored in window.__GS_AES_KEY)
+        if(window.__GS_PRIV_KEY_CRYPTO){
+          const msg = new TextEncoder().encode(JSON.stringify(payload));
+          const sig = await crypto.subtle.sign({name:'ECDSA', hash:'SHA-256'}, window.__GS_PRIV_KEY_CRYPTO, msg);
+          return btoa(String.fromCharCode(...new Uint8Array(sig)));
+        }
+        // attempt to load encrypted private key using session AES key
+        if(window.__GS_AES_KEY){
+          await loadPrivateKeyIfEncrypted(window.__GS_AES_KEY);
+          if(window.__GS_PRIV_KEY_CRYPTO){
+            const msg = new TextEncoder().encode(JSON.stringify(payload));
+            const sig = await crypto.subtle.sign({name:'ECDSA', hash:'SHA-256'}, window.__GS_PRIV_KEY_CRYPTO, msg);
+            return btoa(String.fromCharCode(...new Uint8Array(sig)));
+          }
+        }
+        return null;
+      }catch(e){ console.error('sign failed', e); return null; }
+    }
+
+    // Send a message via ConnectionManager with signature and public key attached when possible
+    async function sendSigned(msg){
+      try{
+        const payload = Object.assign({}, msg, { ts: msg.ts || Date.now() });
+        const sig = await signMessage(payload);
+        const out = Object.assign({}, payload);
+        if(sig && window.__GS_PUB_JWK){ out.__sig = sig; out.__pub = window.__GS_PUB_JWK; }
+        ConnectionManager.send(out);
+        return true;
+      }catch(e){ console.error('sendSigned', e); throw e; }
+    }
+
+    // Verify a signature using provided public JWK
+    async function verifyMessageSignature(payload, signatureB64, pubJwk){
+      try{
+        const pub = await crypto.subtle.importKey('jwk', pubJwk, {name:'ECDSA', namedCurve:'P-256'}, false, ['verify']);
+        const sig = Uint8Array.from(atob(signatureB64), c=>c.charCodeAt(0));
+        const msg = new TextEncoder().encode(JSON.stringify(payload));
+        const ok = await crypto.subtle.verify({name:'ECDSA', hash:'SHA-256'}, pub, sig, msg);
+        return ok;
+      }catch(e){ console.error('verify failed', e); return false; }
+    }
+
     // --- WebRTC/manual-signaling connection manager (data channel) ---
     // Broadcast channel for game windows to communicate with the main page.
     // Messages should be objects with at least {gameId, type, ...}
@@ -331,12 +558,22 @@
         channel.onclose = ()=>{ appendChatMessage('System', 'Data channel closed'); };
         channel.onmessage = ev => {
           try{
-            const msg = JSON.parse(ev.data);
-            if(msg.type === 'chat') appendChatMessage(msg.name||'Peer', msg.text);
-            if(msg.type === 'score') updateRemoteScore(msg.value);
-            if(msg.type === 'mp') handleMpMessage(msg.payload);
-            // forward all messages coming from the network to game windows via BroadcastChannel
-            try{ gameBC.postMessage(Object.assign({}, msg, {network:true})); }catch(e){/* ignore */}
+              const msg = JSON.parse(ev.data);
+              // verify signature if present
+              let verified = false;
+              (async ()=>{
+                try{
+                  if(msg && msg.__sig && msg.__pub){
+                    const payload = { type: msg.type, name: msg.name, text: msg.text, ts: msg.ts };
+                    verified = await verifyMessageSignature(payload, msg.__sig, msg.__pub);
+                  }
+                }catch(e){ console.error('verify error', e); }
+                if(msg.type === 'chat') appendChatMessage(msg.name||'Peer', msg.text, verified);
+                if(msg.type === 'score') updateRemoteScore(msg.value);
+                if(msg.type === 'mp') handleMpMessage(msg.payload);
+                // forward all messages coming from the network to game windows via BroadcastChannel
+                try{ gameBC.postMessage(Object.assign({}, msg, {network:true, __verified: !!verified})); }catch(e){/* ignore */}
+              })();
           }catch(e){ console.log('raw message', ev.data); }
         };
       }
@@ -470,8 +707,8 @@
       const msg = ev.data;
       try{
         if(msg && msg.network) return; // already from network, don't echo
-        // only forward if a data channel is available
-        try{ ConnectionManager.send(msg); }catch(e){ /* if no connection, ignore or optionally queue */ }
+        // only forward if a data channel is available; sign messages when possible
+        try{ sendSigned(msg); }catch(e){ /* if no connection, ignore or optionally queue */ }
       }catch(e){ console.error('gameBC onmessage', e); }
     };
 
@@ -480,7 +717,8 @@
       const box = document.getElementById('chat-messages');
       const el = document.createElement('div');
       el.style.marginBottom='8px';
-      el.innerHTML = `<strong style="display:block">${escapeHtml(name)}</strong><div>${escapeHtml(text)}</div>`;
+      const verified = arguments.length>2 ? arguments[2] : false;
+      el.innerHTML = `<strong style="display:block">${escapeHtml(name)}${verified ? ' <span style="color:#7fffd4;font-size:12px">(verified)</span>':''}</strong><div>${escapeHtml(text)}</div>`;
       box.appendChild(el); box.scrollTop = box.scrollHeight;
     }
 
@@ -493,7 +731,10 @@
 
       openChat.addEventListener('click', ()=>{ chatModal.style.display='block'; });
       closeChat.addEventListener('click', ()=>{ chatModal.style.display='none'; });
-      chatSend.addEventListener('click', ()=>{ const t = chatInput.value.trim(); if(!t) return; appendChatMessage(getUsername()||'Me', t); ConnectionManager.send({type:'chat', name:getUsername(), text:t}); chatInput.value=''; });
+      chatSend.addEventListener('click', async ()=>{ const t = chatInput.value.trim(); if(!t) return; const payload = {type:'chat', name:getUsername(), text:t, ts: Date.now()};
+        appendChatMessage(getUsername()||'Me', t, !!window.__GS_PRIV_KEY_CRYPTO);
+        try{ await sendSigned(payload); }catch(e){ console.error('sendSigned failed', e); ConnectionManager.send(payload); }
+        chatInput.value=''; });
     })();
 
     // Sample multiplayer canvas wiring
@@ -529,27 +770,195 @@
       closeSample.addEventListener('click', ()=>{ sampleModal.style.display='none'; stop(); });
     })();
 
+    // --- helpers for storing/loading games and gamelist ---
+    function saveGameUrlEntry(id, url, meta){
+      const key = `gs_game_${id}`;
+      try{
+        localStorage.setItem(key, 'URL:'+url);
+        if(meta) localStorage.setItem(`gs_game_meta_${id}`, JSON.stringify(meta));
+        try{ setCookie(key+'_url', url, 365); }catch(e){}
+        return true;
+      }catch(e){ console.error('saveGameUrlEntry',e); return false; }
+    }
+
+    function saveGameContentEntry(id, content, meta){
+      const key = `gs_game_${id}`;
+      try{
+        // try using cookie helper which falls back to localStorage
+        saveGameToCookie({id, content});
+      }catch(e){
+        try{ localStorage.setItem(key, content); if(meta) localStorage.setItem(`gs_game_meta_${id}`, JSON.stringify(meta)); }catch(er){ console.error('save fallback',er); }
+      }
+    }
+
+    function listDownloadedGames(){
+      const found = {};
+      try{
+        for(let i=0;i<localStorage.length;i++){
+          const k = localStorage.key(i);
+          if(!k) continue;
+          if(k.startsWith('gs_game_meta_')) continue;
+          if(k.startsWith('gs_game_')){
+            const id = k.replace(/^gs_game_/,'');
+            found[id] = {id, raw: localStorage.getItem(k)};
+            const m = localStorage.getItem(`gs_game_meta_${id}`);
+            if(m) try{ found[id].meta = JSON.parse(m); }catch(e){}
+          }
+        }
+      }catch(e){ console.error(e); }
+      try{
+        const raw = document.cookie.split('; ').filter(Boolean);
+        raw.forEach(p=>{
+          const idx = p.indexOf('='); if(idx===-1) return; const key = decodeURIComponent(p.slice(0,idx)); const val = decodeURIComponent(p.slice(idx+1)||'');
+          if(key.startsWith('gs_game_')){
+            const id = key.replace(/^gs_game_/,''); if(!found[id]) found[id] = {id, raw: val};
+          }
+        });
+      }catch(e){ }
+      return Object.keys(found).map(id=>{
+        const entry = found[id];
+        const metaKey = `gs_game_meta_${id}`;
+        let meta = null;
+        try{ meta = localStorage.getItem(metaKey); if(meta) meta = JSON.parse(meta); }catch(e){}
+        return { id, value: entry.raw, meta };
+      });
+    }
+
+    function showDownloadedView(){
+      const arr = listDownloadedGames();
+      listEl.innerHTML = '';
+      if(arr.length===0){ listEl.innerHTML = '<div class="empty">No downloaded games saved.</div>'; return; }
+      arr.forEach(item=>{
+        const name = (item.meta && item.meta.name) || item.id;
+        const desc = (item.meta && item.meta.desc) || '';
+        const game = { id: item.id, name, description: desc };
+        if(typeof item.value === 'string' && item.value.startsWith('URL:')) game.content = { url: item.value.replace(/^URL:/,'') };
+        else game.content = item.value || '';
+        const card = createCard(game);
+        listEl.appendChild(card);
+      });
+    }
+
+    function showAddModal(){ document.getElementById('add-modal').style.display = 'flex'; }
+    function hideAddModal(){ document.getElementById('add-modal').style.display = 'none'; }
+
+    // Wire up add-modal buttons and quick actions
+    (function(){
+      const addBtn = document.getElementById('add-game-btn');
+      const downloadedBtn = document.getElementById('downloaded-btn');
+      addBtn.addEventListener('click', ()=>{ showAddModal(); });
+      downloadedBtn.addEventListener('click', ()=>{ showDownloadedView(); });
+
+      const cancelGame = document.getElementById('add-game-cancel');
+      const submitGame = document.getElementById('add-game-submit');
+      const fileInput = document.getElementById('add-game-file');
+      const urlInput = document.getElementById('add-game-url');
+      const saveUrlCb = document.getElementById('add-game-save-url');
+
+      cancelGame.addEventListener('click', ()=> hideAddModal());
+
+      submitGame.addEventListener('click', async ()=>{
+        const name = document.getElementById('add-game-name').value.trim();
+        const desc = document.getElementById('add-game-desc').value.trim();
+        if(fileInput.files && fileInput.files[0]){
+          const f = fileInput.files[0];
+          const txt = await f.text();
+          const id = (f.name||('local-'+Date.now())).replace(/[^a-z0-9-_\.]/ig,'-');
+          saveGameContentEntry(id, txt, {name: name||f.name, desc});
+          const game = {id, name: name||f.name, description: desc, content: txt};
+          const card = createCard(game); listEl.insertBefore(card, listEl.firstChild);
+          alert('Game added to downloaded games.'); hideAddModal(); return;
+        }
+        const u = urlInput.value.trim();
+        if(u){
+          const id = 'url-'+(Date.now());
+          if(saveUrlCb.checked){ saveGameUrlEntry(id, u, {name, desc}); }
+          try{
+            const res = await fetch(u, {cache:'no-store'});
+            const txt = await res.text();
+            const game = { id, name: name||u, description: desc, content: saveUrlCb.checked ? {url: u} : txt };
+            if(!saveUrlCb.checked) saveGameContentEntry(id, txt, {name: name||u, desc});
+            const card = createCard(game); listEl.insertBefore(card, listEl.firstChild);
+            alert('Game added.'); hideAddModal();
+            return;
+          }catch(e){ alert('Failed to fetch URL: '+e.message); }
+        }
+        alert('Please supply a file or a URL.');
+      });
+
+      // gamelist side
+      const cancelG = document.getElementById('add-gamelist-cancel');
+      const submitG = document.getElementById('add-gamelist-submit');
+      const fileG = document.getElementById('add-gamelist-file');
+      const urlG = document.getElementById('add-gamelist-url');
+      const saveGcb = document.getElementById('add-gamelist-save-url');
+
+      cancelG.addEventListener('click', ()=> hideAddModal());
+      submitG.addEventListener('click', async ()=>{
+        if(fileG.files && fileG.files[0]){
+          try{
+            const txt = await fileG.files[0].text();
+            const arr = JSON.parse(txt);
+            renderGames(arr);
+            try{ localStorage.setItem('gs_gamelist', txt); alert('Gamelist loaded from file and saved locally.'); }catch(e){}
+            hideAddModal(); return;
+          }catch(e){ alert('Failed to read/parse file: '+e.message); return; }
+        }
+        const u = urlG.value.trim();
+        if(u){
+          try{
+            const res = await fetch(u, {cache:'no-store'});
+            if(!res.ok) throw new Error('HTTP '+res.status);
+            const arr = await res.json();
+            renderGames(arr);
+            if(saveGcb.checked){ try{ localStorage.setItem('gs_gamelist_url', u); setCookie('gs_gamelist_url', u, 365); }catch(e){} }
+            hideAddModal(); alert('Gamelist loaded from URL.'); return;
+          }catch(e){ alert('Failed to fetch gamelist URL: '+e.message); }
+        }
+        alert('Please select a file or provide a URL.');
+      });
+    })();
+
     async function load(){
       try{
         const res = await fetch('gamelist.json', {cache: 'no-store'});
         if(!res.ok) throw new Error('HTTP '+res.status);
         const arr = await res.json();
-        listEl.innerHTML = '';
-        if(!Array.isArray(arr) || arr.length===0){
-          listEl.innerHTML = '<div class="empty">No games found in <code>gamelist.json</code>.</div>';
-          return;
-        }
-        arr.forEach(game=>{
-          const card = createCard(game);
-          listEl.appendChild(card);
-        });
+        renderGames(arr);
+        return;
       }catch(err){
-        listEl.innerHTML = `<div class="empty">Failed to load games: ${escapeHtml(err.message||String(err))}</div>`;
+        console.warn('gamelist.json fetch failed:', err && err.message);
+        // try saved gamelist JSON in localStorage
+        try{
+          const saved = localStorage.getItem('gs_gamelist');
+          if(saved){ const arr = JSON.parse(saved); renderGames(arr); return; }
+        }catch(e){ console.error('failed to parse saved gamelist', e); }
+        // try saved gamelist URL
+        try{
+          const u = localStorage.getItem('gs_gamelist_url') || getCookie('gs_gamelist_url');
+          if(u){ const r = await fetch(u, {cache:'no-store'}); if(r.ok){ const arr = await r.json(); renderGames(arr); return; } }
+        }catch(e){ console.error('failed to load saved gamelist url', e); }
+
+        // no fallback available — show message with option to add
+        listEl.innerHTML = `<div class="empty">Failed to load games: ${escapeHtml(err.message||String(err))}<br><small>Make sure to run a static server (see README.md). Example: <code>python3 -m http.server 8000</code></small><br><br><button id="add-gamelist-quick" class="open">Add gamelist / Add game</button></div>`;
+        const btn = document.getElementById('add-gamelist-quick'); if(btn) btn.addEventListener('click', showAddModal);
         console.error(err);
       }
     }
 
-    load();
+    // If encrypted store active, prompt for password to unlock before loading gamelist
+    (async function(){
+      if(localStorage.getItem('gs_encrypted_active')){
+        const p = prompt('Encrypted store detected. Enter your password to unlock saved games and keys:');
+        if(p){
+          const ok = await tryUnlockWithPassword(p);
+          if(!ok) alert('Failed to unlock with that password. Encrypted saved data will remain locked.');
+        }else{
+          console.warn('Encrypted store present but no password provided.');
+        }
+      }
+      load();
+    })();
 
     // Export/Import cookies (exclude saved games prefixed with gs_game_)
     function exportCookies(){
