@@ -53,7 +53,10 @@
       <h2 style="margin:0 0 8px 0">Welcome</h2>
       <p style="margin:0 0 12px;color:var(--muted)">Enter a display name that will be passed to games and saved for offline use.</p>
       <div style="display:flex;gap:8px">
-        <input id="username-input" placeholder="Your name" style="flex:1;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit">
+        <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+          <input id="username-input" placeholder="Your name" style="width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit">
+          <input id="username-password" type="password" placeholder="Optional password to encrypt saved data" style="width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit;font-size:13px">
+        </div>
         <button id="save-username" class="play">Save</button>
       </div>
     </div>
@@ -229,7 +232,7 @@
       const injectedPrefixParts = [];
       injectedPrefixParts.push(`window.GAME_ID = ${JSON.stringify(game.id)};`);
       if(username) injectedPrefixParts.push(`window.GAME_USERNAME = ${JSON.stringify(username)};`);
-      const injectedPrefix = injectedPrefixParts.length ? `<script>${injectedPrefixParts.join('')}</script>` : '';
+  const injectedPrefix = injectedPrefixParts.length ? `<script>${injectedPrefixParts.join('')}<\/script>` : '';
       // If saved game is a URL (object or URL string), open the URL directly
       if(game && game.content && (typeof game.content === 'object' && game.content.url || (typeof game.content === 'string' && game.content.startsWith('URL:')))){
         try{
