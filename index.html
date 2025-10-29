@@ -47,6 +47,14 @@
     </div>
   </header>
 
+  <!-- Simple page navigation -->
+  <nav id="main-nav" style="display:flex;gap:8px;padding:12px 32px;border-bottom:1px solid rgba(255,255,255,0.02);background:rgba(0,0,0,0.02)">
+    <button class="open" data-page="all" id="nav-all">All Games</button>
+    <button class="open" data-page="gamelists" id="nav-gamelists">Gamelists</button>
+    <button class="open" data-page="downloaded" id="nav-downloaded">Downloaded</button>
+    <button class="open" data-page="settings" id="nav-settings">Settings</button>
+  </nav>
+
   <!-- Username modal -->
   <div id="username-modal" style="display:none;position:fixed;inset:0;background:rgba(2,6,23,0.7);backdrop-filter:blur(4px);align-items:center;justify-content:center;z-index:60">
     <div style="background:var(--card);padding:20px;border-radius:12px;max-width:420px;width:90%;box-shadow:0 10px 40px rgba(2,6,23,0.7)">
@@ -62,8 +70,36 @@
     </div>
   </div>
 
-  <main id="list">
-    <div class="empty">Loading games…</div>
+  <main style="padding:28px;max-width:900px;margin:0 auto;">
+    <div id="page-all" style="display:block">
+      <div id="list">
+        <div class="empty">Loading games…</div>
+      </div>
+    </div>
+
+    <div id="page-gamelists" style="display:none">
+      <div class="card">
+        <h3>Available gamelists</h3>
+        <div id="gamelist-sources" style="display:flex;flex-direction:column;gap:8px;margin-top:12px"></div>
+      </div>
+    </div>
+
+    <div id="page-downloaded" style="display:none">
+      <div id="downloaded-list">
+        <!-- downloaded games will be rendered here by showDownloadedView into the main list area -->
+        <div class="empty">No downloaded games yet.</div>
+      </div>
+    </div>
+
+    <div id="page-settings" style="display:none">
+      <div class="card">
+        <h3>Settings</h3>
+        <div style="margin-top:12px;display:flex;flex-direction:column;gap:12px">
+          <label><input type="checkbox" id="settings-encrypted"> Encrypted saved data active</label>
+          <div style="display:flex;gap:8px"><button id="settings-export" class="open">Export cookies</button><button id="settings-clear" class="open">Clear saved data</button></div>
+        </div>
+      </div>
+    </div>
   </main>
 
   <!-- Signaling modal for manual offer/answer exchange -->
@@ -274,6 +310,43 @@
         }
       }catch(e){ console.error('renderGames failed', e); listEl.innerHTML = '<div class="empty">Failed to render games.</div>'; }
     }
+
+    // Simple page navigation helper
+    function switchPage(page){
+      const pages = ['all','gamelists','downloaded','settings'];
+      pages.forEach(p=>{ const el = document.getElementById('page-'+p); if(!el) return; el.style.display = (p===page)?'block':'none'; const btn = document.getElementById('nav-'+p); if(btn) btn.style.boxShadow = (p===page)?'inset 0 -2px 0 var(--accent)':''; });
+      // page-specific actions
+      if(page==='all'){
+        // ensure list has current games (no-op if already rendered)
+      }
+      if(page==='gamelists'){
+        const container = document.getElementById('gamelist-sources'); container.innerHTML = '';
+        // built-in
+        const built = document.createElement('div'); built.textContent = 'Built-in: gamelist.json'; const loadBuilt = document.createElement('button'); loadBuilt.className='open'; loadBuilt.textContent='Load'; loadBuilt.addEventListener('click', ()=>{ load(); switchPage('all'); }); built.appendChild(loadBuilt); container.appendChild(built);
+        // local saved
+        try{ const saved = localStorage.getItem('gs_gamelist'); if(saved){ const d=document.createElement('div'); d.textContent='Local saved gamelist'; const bt=document.createElement('button'); bt.className='open'; bt.textContent='Load'; bt.addEventListener('click', ()=>{ renderGames(JSON.parse(saved)); switchPage('all'); }); d.appendChild(bt); container.appendChild(d); } }catch(e){}
+        // saved URL
+        try{ const u = localStorage.getItem('gs_gamelist_url') || getCookie('gs_gamelist_url'); if(u){ const d=document.createElement('div'); d.textContent = 'Saved URL: '+u; const bt=document.createElement('button'); bt.className='open'; bt.textContent='Load'; bt.addEventListener('click', async ()=>{ try{ const r = await fetch(u); const arr = await r.json(); renderGames(arr); switchPage('all'); }catch(e){ alert('Failed to fetch saved gamelist URL: '+e.message); } }); d.appendChild(bt); container.appendChild(d); } }catch(e){}
+      }
+      if(page==='downloaded'){
+        // render into downloaded-list
+        const dl = document.getElementById('downloaded-list'); dl.innerHTML = '';
+        const arr = listDownloadedGames();
+        if(arr.length===0){ dl.innerHTML = '<div class="empty">No downloaded games saved.</div>'; return; }
+        arr.forEach(item=>{ const name=(item.meta&&item.meta.name)||item.id; const desc=(item.meta&&item.meta.desc)||''; const game={id:item.id,name,description:desc}; if(typeof item.value==='string'&&item.value.startsWith('URL:')) game.content={url:item.value.replace(/^URL:/,'')}; else game.content=item.value||''; dl.appendChild(createCard(game)); });
+      }
+      if(page==='settings'){
+        document.getElementById('settings-encrypted').checked = !!localStorage.getItem('gs_encrypted_active');
+      }
+    }
+
+    // wire nav
+    (function(){ ['all','gamelists','downloaded','settings'].forEach(p=>{ const b=document.getElementById('nav-'+p); if(!b) return; b.addEventListener('click', ()=> switchPage(p)); });
+      // default to All Games
+      switchPage('all');
+      document.getElementById('settings-export').addEventListener('click', exportCookies);
+      document.getElementById('settings-clear').addEventListener('click', ()=>{ if(confirm('Clear all saved localStorage and cookies for this app?')){ // clear keys prefixed with gs_
+        try{ for(let i=localStorage.length-1;i>=0;i--){ const k=localStorage.key(i); if(k && k.startsWith('gs_')) localStorage.removeItem(k); } const raw=document.cookie.split('; ').filter(Boolean); raw.forEach(p=>{ const idx=p.indexOf('='); if(idx===-1) return; const k=decodeURIComponent(p.slice(0,idx)); if(k.startsWith('gs_')) document.cookie = k+'=; max-age=0; path=/'; }); alert('Cleared. Reloading page.'); location.reload(); }catch(e){ alert('Failed to clear: '+e.message); } } }); })();
 
     function escapeHtml(s){ return (s||'').replace(/[&<>\"]/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' })[c]); }
     function escapeAttribute(s){ return (s||'').replace(/&/g,'&amp;').replace(/\"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
