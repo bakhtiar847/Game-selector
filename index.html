@@ -258,6 +258,23 @@
       doc.close();
     }
 
+    // Render an array of gamelist entries into the main list element.
+    // Accepts entries with either a `content` (HTML string) or a `url` (string) field.
+    function renderGames(arr){
+      try{
+        if(!arr || !Array.isArray(arr) || arr.length===0){ listEl.innerHTML = '<div class="empty">No games available.</div>'; return; }
+        listEl.innerHTML = '';
+        for(let i=0;i<arr.length;i++){
+          const g = Object.assign({}, arr[i]);
+          if(!g.id) g.id = 'g-'+i;
+          // normalize url -> content pointer (createCard also does this but keep consistent)
+          if(g.url && !g.content) g.content = { url: g.url };
+          const card = createCard(g);
+          listEl.appendChild(card);
+        }
+      }catch(e){ console.error('renderGames failed', e); listEl.innerHTML = '<div class="empty">Failed to render games.</div>'; }
+    }
+
     function escapeHtml(s){ return (s||'').replace(/[&<>\"]/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' })[c]); }
     function escapeAttribute(s){ return (s||'').replace(/&/g,'&amp;').replace(/\"/g,'&quot;').replace(/'/g,'&#39;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
@@ -319,22 +336,23 @@
 
     // modal wiring
     (function(){
-      const modal = document.getElementById('username-modal');
-      const input = document.getElementById('username-input');
-      const save = document.getElementById('save-username');
-      const change = document.getElementById('change-username');
+  const modal = document.getElementById('username-modal');
+  const input = document.getElementById('username-input');
+  const passInput = document.getElementById('username-password');
+  const save = document.getElementById('save-username');
+  const change = document.getElementById('change-username');
 
-      change.addEventListener('click', ()=>{ input.value = getUsername() || ''; modal.style.display = 'flex'; input.focus(); });
+      change.addEventListener('click', ()=>{ input.value = getUsername() || ''; passInput.value = ''; modal.style.display = 'flex'; input.focus(); });
         save.addEventListener('click', async ()=>{ const v = (input.value||'').trim(); if(!v){ alert('Please enter a name.'); return; }
-          // optional password: ask user (empty = no encryption)
-          const pass = prompt('Enter an optional password to encrypt saved data (leave empty for none):');
+          // optional password: read from modal field (empty = no encryption)
+          const pass = (passInput.value||'').trim();
           try{
             if(pass){
               // derive key and lock store
               await promptPasswordAndLock(pass);
             }
           }catch(e){ console.error('lock failed', e); alert('Failed to enable encryption: '+e.message); }
-          setUsername(v); modal.style.display='none'; });
+          setUsername(v); passInput.value=''; modal.style.display='none'; });
 
       // show on first load if no username
       if(!getUsername()){
