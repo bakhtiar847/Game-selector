@@ -1109,6 +1109,22 @@
     const fileInput = document.getElementById('import-file');
     importBtn.addEventListener('click', ()=> fileInput.click());
     fileInput.addEventListener('change', (e)=>{ const f = e.target.files && e.target.files[0]; if(f) importCookiesFromFile(f); });
+
+    // Sidebar toggle and gamelists dropdown wiring (moved controls)
+    (function(){
+      const sidebarToggle = document.getElementById('sidebar-toggle');
+      if(sidebarToggle) sidebarToggle.addEventListener('click', ()=>{ document.body.classList.toggle('sidebar-collapsed'); });
+
+      const gToggle = document.getElementById('gamelists-toggle');
+      const gList = document.getElementById('gamelists-list');
+      if(gToggle && gList) gToggle.addEventListener('click', ()=>{ gList.style.display = gList.style.display === 'block' ? 'none' : 'block'; });
+
+      const gAdd = document.getElementById('gamelists-add');
+      if(gAdd) gAdd.addEventListener('click', ()=>{ showAddModal(); });
+
+      const builtLoad = document.getElementById('gamelist-load-built');
+      if(builtLoad) builtLoad.addEventListener('click', ()=>{ load(); switchPage('all'); });
+    })();
   </script>
 </body>
 </html>
