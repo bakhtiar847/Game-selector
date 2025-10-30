@@ -23,6 +23,12 @@
     .empty{color:var(--muted);grid-column:1/-1;text-align:center;padding:40px}
     footer{margin-top:auto;padding:18px 28px;color:var(--muted);font-size:13px}
     @media (max-width:520px){main{padding:16px;grid-template-columns:1fr}header{padding:18px}}
+    /* Sidebar/layout adjustments */
+    #sidebar{overflow:auto}
+    body.sidebar-collapsed #sidebar{width:64px}
+    main#main-content{margin-left:220px;transition:margin .18s}
+    body.sidebar-collapsed main#main-content{margin-left:64px}
+    @media (max-width:700px){#sidebar{display:none} main#main-content{margin-left:0}}
   </style>
 </head>
 <body>
@@ -83,7 +89,7 @@
     </div>
   </div>
 
-  <main style="padding:28px;max-width:900px;margin:0 auto;">
+  <main id="main-content" style="padding:28px;max-width:900px;margin:0 auto;">
     <div id="page-all" style="display:block">
       <div id="list">
         <div class="empty">Loading games…</div>
@@ -109,7 +115,14 @@
         <h3>Settings</h3>
         <div style="margin-top:12px;display:flex;flex-direction:column;gap:12px">
           <label><input type="checkbox" id="settings-encrypted"> Encrypted saved data active</label>
-          <div style="display:flex;gap:8px"><button id="settings-export" class="open">Export cookies</button><button id="settings-clear" class="open">Clear saved data</button></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button id="settings-export" class="open">Export cookies</button>
+            <button id="export-cookies" class="open">Export (all)</button>
+            <button id="import-cookies" class="open">Import cookies</button>
+            <input id="import-file" type="file" accept="application/json" style="display:none">
+            <button id="change-username" class="open">Change username</button>
+            <button id="settings-clear" class="open">Clear saved data</button>
+          </div>
         </div>
       </div>
     </div>
