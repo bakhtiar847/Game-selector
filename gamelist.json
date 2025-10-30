@@ -1,5 +1,4 @@
 [
-  [
     {
       "id": "game-1",
       "name": "Bouncing Ball",
@@ -42,5 +41,4 @@
       "description": "An entry that references a game by URL instead of embedding full HTML.",
       "url": "https://example.com/"
     }
-  ]
-  }
+]
