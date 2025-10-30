@@ -31,7 +31,6 @@
     <h1>Game Selector</h1>
     <div id="userBox" style="margin-left:auto;display:flex;align-items:center;gap:8px">
       <span id="username-display" style="color:var(--muted);font-size:13px"></span>
-      <button id="change-username" class="open" style="padding:6px 10px">Change</button>
     </div>
     <div id="multiplayerBox" style="margin-left:12px;display:flex;align-items:center;gap:8px">
       <button id="host-btn" class="open" title="Host (manual WebRTC)">Host</button>
@@ -41,19 +40,33 @@
       <button id="open-sample" class="play">Open Sample</button>
       <button id="downloaded-btn" class="open" title="Show downloaded games">Downloaded</button>
       <button id="add-game-btn" class="open" title="Add a game or gamelist">Add Game</button>
-      <button id="export-cookies" class="open" title="Export cookies to a JSON file">Export Cookies</button>
-      <button id="import-cookies" class="open" title="Import cookies from a JSON file">Import Cookies</button>
-      <input id="import-file" type="file" accept="application/json" style="display:none">
+      <!-- export/import/change username controls moved to Settings panel -->
     </div>
   </header>
 
-  <!-- Simple page navigation -->
-  <nav id="main-nav" style="display:flex;gap:8px;padding:12px 32px;border-bottom:1px solid rgba(255,255,255,0.02);background:rgba(0,0,0,0.02)">
-    <button class="open" data-page="all" id="nav-all">All Games</button>
-    <button class="open" data-page="gamelists" id="nav-gamelists">Gamelists</button>
-    <button class="open" data-page="downloaded" id="nav-downloaded">Downloaded</button>
-    <button class="open" data-page="settings" id="nav-settings">Settings</button>
-  </nav>
+  <!-- Collapsible side panel navigation -->
+  <aside id="sidebar" style="position:fixed;left:0;top:0;bottom:0;width:220px;padding-top:72px;background:var(--card);border-right:1px solid rgba(255,255,255,0.02);box-shadow:2px 0 24px rgba(2,6,23,0.4);transition:width .2s;z-index:40">
+    <div style="position:absolute;top:12px;left:12px;right:12px;display:flex;align-items:center;justify-content:space-between">
+      <strong>Menu</strong>
+      <button id="sidebar-toggle" class="open" style="padding:6px 8px">≡</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;padding:8px">
+      <button class="open" data-page="all" id="nav-all" style="text-align:left">All Games</button>
+      <div>
+        <button id="gamelists-toggle" class="open" style="text-align:left;width:100%">Gamelists ▾</button>
+        <div id="gamelists-list" style="display:none;margin-top:6px;padding-left:8px;display:flex;flex-direction:column;gap:6px">
+          <button class="open" id="gamelist-load-built" style="text-align:left">Built-in (gamelist.json)</button>
+          <div style="display:flex;gap:6px;align-items:center">
+            <button class="open" id="gamelists-add" style="flex:1;text-align:left">Add…</button>
+          </div>
+        </div>
+      </div>
+      <button class="open" data-page="downloaded" id="nav-downloaded" style="text-align:left">Downloaded</button>
+      <button class="open" data-page="settings" id="nav-settings" style="text-align:left">Settings</button>
+    </div>
+  </aside>
+
+  <!-- main content shifted to the right to allow for sidebar -->
 
   <!-- Username modal -->
   <div id="username-modal" style="display:none;position:fixed;inset:0;background:rgba(2,6,23,0.7);backdrop-filter:blur(4px);align-items:center;justify-content:center;z-index:60">
