@@ -40,5 +40,11 @@
       "name": "External Sample (URL)",
       "description": "An entry that references a game by URL instead of embedding full HTML.",
       "url": "https://example.com/"
+    },
+    {
+      "id": "game-8",
+      "name": "Race Game (URL)",
+      "description": "A simple racing game hosted externally.",
+      "url": "https://bakhtiar847.github.io/Race-Game/index.html"
     }
 ]
