@@ -286,19 +286,59 @@
     menu.style.display='none';
   });
   const dl = document.createElement('button'); dl.textContent='Download'; dl.addEventListener('click', ()=>{ downloadGame(game); menu.style.display='none'; });
-  const saveCookieBtn = document.createElement('button'); saveCookieBtn.textContent='Save (cookie)'; saveCookieBtn.addEventListener('click', ()=>{
-    // If this entry is a URL, save as a URL entry. Otherwise attempt to save HTML content to cookie/localStorage
-    if(game && game.content && (typeof game.content === 'object' && game.content.url || (typeof game.content === 'string' && game.content.startsWith('URL:')))){
-      const url = (typeof game.content === 'string') ? game.content.replace(/^URL:/,'') : game.content.url;
-      saveGameUrlEntry(game.id, url, {name: game.name, desc: game.description});
-      alert('Saved URL to downloaded games.');
-    }else{
-      saveGameToCookie(game);
-      alert('Saved game (attempted cookie, falls back to localStorage).');
-    }
-    menu.style.display='none';
-  });
-  menu.appendChild(openNew); menu.appendChild(dl); menu.appendChild(saveCookieBtn);
+  // Show either a Save (cookie) button or a Delete (cookie) button depending on whether
+  // the entry already exists in cookies. We treat as "saved in cookie" when a cookie
+  // key exists for gs_game_<id> or gs_game_<id>_url (legacy URL cookie).
+  function isSavedInCookie(id){
+    try{ return getCookie(`gs_game_${id}`) !== null || getCookie(`gs_game_${id}_url`) !== null; }catch(e){ return false; }
+  }
+
+  function makeSaveButton(){
+    const btn = document.createElement('button'); btn.textContent='Save (cookie)';
+    btn.addEventListener('click', ()=>{
+      // If this entry is a URL, save as a URL entry. Otherwise attempt to save HTML content to cookie/localStorage
+      if(game && game.content && (typeof game.content === 'object' && game.content.url || (typeof game.content === 'string' && game.content.startsWith('URL:')))){
+        const url = (typeof game.content === 'string') ? game.content.replace(/^URL:/,'') : game.content.url;
+        // use the JSON-aware helper for URL entries as well so metadata is preserved when possible
+        try{ saveGameToCookie({ id: game.id, url }); localStorage.setItem(`gs_game_meta_${game.id}`, JSON.stringify({name: game.name, desc: game.description})); alert('Saved URL to downloaded games.'); }catch(e){ saveGameUrlEntry(game.id, url, {name: game.name, desc: game.description}); alert('Saved URL (fallback)'); }
+      }else{
+        saveGameToCookie(Object.assign({}, game));
+        try{ localStorage.setItem(`gs_game_meta_${game.id}`, JSON.stringify({name: game.name, desc: game.description})); }catch(e){}
+        alert('Saved game (attempted cookie, falls back to localStorage).');
+      }
+      // swap to delete button in the UI
+      menu.removeChild(btn);
+      const del = makeDeleteButton(); menu.appendChild(del);
+      // add saved badge if missing
+      if(!h.querySelector('.badge-saved')){ const badge = document.createElement('span'); badge.className='badge-saved'; badge.textContent='Saved offline'; h.appendChild(badge); }
+      menu.style.display='none';
+    });
+    return btn;
+  }
+
+  function makeDeleteButton(){
+    const btn = document.createElement('button'); btn.textContent='Delete (cookie)';
+    btn.addEventListener('click', ()=>{
+      try{
+        const key = `gs_game_${game.id}`;
+        // remove cookie forms and localStorage entries
+        try{ document.cookie = encodeURIComponent(key)+'=; max-age=0; path=/'; document.cookie = encodeURIComponent(key+'_url')+'=; max-age=0; path=/'; }catch(e){}
+        try{ localStorage.removeItem(key); localStorage.removeItem(key+'_url'); localStorage.removeItem(`gs_game_meta_${game.id}`); }catch(e){}
+        // remove saved badge if present
+        const badge = h.querySelector('.badge-saved'); if(badge) badge.remove();
+        // swap back to save button
+        menu.removeChild(btn);
+        const saveBtn = makeSaveButton(); menu.appendChild(saveBtn);
+        alert('Deleted saved cookie/localStorage entry.');
+      }catch(e){ console.error('delete cookie failed', e); alert('Failed to delete saved cookie: '+e.message); }
+      menu.style.display='none';
+    });
+    return btn;
+  }
+
+  // choose which button to show initially
+  const initialButton = isSavedInCookie(game.id) ? makeDeleteButton() : makeSaveButton();
+  menu.appendChild(openNew); menu.appendChild(dl); menu.appendChild(initialButton);
   menuWrap.appendChild(menuBtn); menuWrap.appendChild(menu);
   menuBtn.addEventListener('click', ()=>{ menu.style.display = menu.style.display === 'block' ? 'none' : 'block'; });
   // close menus when clicking outside
@@ -368,6 +408,11 @@
         listEl.innerHTML = '';
         for(let i=0;i<arr.length;i++){
           const g = Object.assign({}, arr[i]);
+          // ensure gamelist entry respects mutual exclusivity: prefer `url` over `content` when both provided
+          if(g.url && g.content){
+            // if both set, prefer url (treat as external pointer) and drop inline content
+            delete g.content;
+          }
           if(!g.id) g.id = 'g-'+i;
           // normalize url -> content pointer (createCard also does this but keep consistent)
           if(g.url && !g.content) g.content = { url: g.url };
