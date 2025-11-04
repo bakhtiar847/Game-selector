@@ -44,11 +44,12 @@
       <button id="bluetooth-btn" class="open" title="Bluetooth (browser-to-browser Bluetooth is not available)">Bluetooth</button>
       <button id="open-chat" class="open">Chat</button>
       <button id="open-sample" class="play">Open Sample</button>
-      <button id="downloaded-btn" class="open" title="Show downloaded games">Downloaded</button>
+  <!-- Downloaded button removed from header (already available in sidebar navigation) -->
       <button id="add-game-btn" class="open" title="Add a game or gamelist">Add Game</button>
       <!-- export/import/change username controls moved to Settings panel -->
     </div>
   </header>
+
 
   <!-- Collapsible side panel navigation -->
   <aside id="sidebar" style="position:fixed;left:0;top:0;bottom:0;width:220px;padding-top:72px;background:var(--card);border-right:1px solid rgba(255,255,255,0.02);box-shadow:2px 0 24px rgba(2,6,23,0.4);transition:width .2s;z-index:40">
@@ -182,6 +183,7 @@
                 <div>
                   <input id="add-game-file" type="file" accept="text/html" />
                 </div>
+                <label style="font-size:13px"><input id="add-game-save-cookie" type="checkbox"> Try to save file to cookies (falls back to localStorage)</label>
                 <div style="display:flex;gap:8px;align-items:center">
                   <input id="add-game-url" placeholder="https://example.com/game.html" style="flex:1;padding:8px;border-radius:6px">
                   <label style="display:flex;align-items:center;gap:6px"><input id="add-game-save-url" type="checkbox"> Save URL</label>
@@ -200,6 +202,7 @@
                 <div>
                   <input id="add-gamelist-file" type="file" accept="application/json">
                 </div>
+                <label style="font-size:13px"><input id="add-gamelist-save-cookie" type="checkbox"> Try to save gamelist to cookies (may fail for large files)</label>
                 <div style="display:flex;gap:8px;align-items:center">
                   <input id="add-gamelist-url" placeholder="https://example.com/gamelist.json" style="flex:1;padding:8px;border-radius:6px">
                   <label style="display:flex;align-items:center;gap:6px"><input id="add-gamelist-save-url" type="checkbox"> Save URL</label>
@@ -254,10 +257,38 @@
   const menuWrap = document.createElement('div'); menuWrap.style.position='relative';
   const menuBtn = document.createElement('button'); menuBtn.className='menu-btn'; menuBtn.textContent='⋯';
   const menu = document.createElement('div'); menu.className='menu';
-  const openNew = document.createElement('button'); openNew.textContent='Open source';
-  openNew.addEventListener('click', ()=>{ openGameWindow(game, true); menu.style.display='none'; });
+  const openNew = document.createElement('button'); openNew.textContent='Open / Save external';
+  openNew.addEventListener('click', ()=>{
+    // If this entry points at an external URL, offer to save the URL or simply open it.
+    if(game && game.content && (typeof game.content === 'object' && game.content.url || (typeof game.content === 'string' && game.content.startsWith('URL:')))){
+      const url = (typeof game.content === 'string') ? game.content.replace(/^URL:/,'') : game.content.url;
+      // Ask whether to save the URL to downloaded games first.
+      const save = confirm('This game is an external URL. Click OK to save the URL to Downloaded games, or Cancel to just open it.');
+      if(save){
+        try{ saveGameUrlEntry(game.id + '-saved', url, {name: game.name, desc: game.description}); alert('Saved URL to downloaded games.'); }catch(e){ alert('Failed to save URL: '+e.message); }
+      }
+      // Open in new tab/window
+      try{ window.open(url, '_blank'); }catch(e){ alert('Failed to open URL: '+e.message); }
+      menu.style.display='none';
+      return;
+    }
+    // otherwise show the source view for inline content
+    openGameWindow(game, true);
+    menu.style.display='none';
+  });
   const dl = document.createElement('button'); dl.textContent='Download'; dl.addEventListener('click', ()=>{ downloadGame(game); menu.style.display='none'; });
-  const saveCookieBtn = document.createElement('button'); saveCookieBtn.textContent='Save (cookie)'; saveCookieBtn.addEventListener('click', ()=>{ saveGameToCookie(game); menu.style.display='none'; });
+  const saveCookieBtn = document.createElement('button'); saveCookieBtn.textContent='Save (cookie)'; saveCookieBtn.addEventListener('click', ()=>{
+    // If this entry is a URL, save as a URL entry. Otherwise attempt to save HTML content to cookie/localStorage
+    if(game && game.content && (typeof game.content === 'object' && game.content.url || (typeof game.content === 'string' && game.content.startsWith('URL:')))){
+      const url = (typeof game.content === 'string') ? game.content.replace(/^URL:/,'') : game.content.url;
+      saveGameUrlEntry(game.id, url, {name: game.name, desc: game.description});
+      alert('Saved URL to downloaded games.');
+    }else{
+      saveGameToCookie(game);
+      alert('Saved game (attempted cookie, falls back to localStorage).');
+    }
+    menu.style.display='none';
+  });
   menu.appendChild(openNew); menu.appendChild(dl); menu.appendChild(saveCookieBtn);
   menuWrap.appendChild(menuBtn); menuWrap.appendChild(menu);
   menuBtn.addEventListener('click', ()=>{ menu.style.display = menu.style.display === 'block' ? 'none' : 'block'; });
@@ -382,17 +413,24 @@
       return (name||'game').toLowerCase().replace(/[^a-z0-9-_]+/g,'-').replace(/^-+|-+$/g,'') || 'game';
     }
 
-    function downloadGame(game){
-      const blob = new Blob([game.content || '<!doctype html><meta charset="utf-8"><body><p>No content provided.</p></body>'], {type: 'text/html'});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = safeFilename(game.name) + '.html';
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      // release the object URL after a short timeout
-      setTimeout(()=>URL.revokeObjectURL(url), 5000);
+    async function downloadGame(game){
+      try{
+        // If this is a URL entry, fetch it then download the response body as HTML
+        let content = null;
+        if(game && game.content && (typeof game.content === 'object' && game.content.url || (typeof game.content === 'string' && game.content.startsWith('URL:')))){
+          const url = (typeof game.content === 'string') ? game.content.replace(/^URL:/,'') : game.content.url;
+          const res = await fetch(url);
+          if(!res.ok) throw new Error('Failed to fetch URL: HTTP '+res.status);
+          const txt = await res.text();
+          content = txt;
+        }else{
+          content = game.content || '<!doctype html><meta charset="utf-8"><body><p>No content provided.</p></body>';
+        }
+        const blob = new Blob([content], {type: 'text/html'});
+        const objUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = objUrl; a.download = safeFilename(game.name) + '.html'; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(()=>URL.revokeObjectURL(objUrl), 5000);
+      }catch(e){ alert('Download failed: '+(e && e.message)); console.error(e); }
     }
 
     // --- username / cookie helpers ---
@@ -964,10 +1002,8 @@
 
     // Wire up add-modal buttons and quick actions
     (function(){
-      const addBtn = document.getElementById('add-game-btn');
-      const downloadedBtn = document.getElementById('downloaded-btn');
-      addBtn.addEventListener('click', ()=>{ showAddModal(); });
-      downloadedBtn.addEventListener('click', ()=>{ showDownloadedView(); });
+  const addBtn = document.getElementById('add-game-btn');
+  addBtn.addEventListener('click', ()=>{ showAddModal(); });
 
       const cancelGame = document.getElementById('add-game-cancel');
       const submitGame = document.getElementById('add-game-submit');
@@ -984,7 +1020,21 @@
           const f = fileInput.files[0];
           const txt = await f.text();
           const id = (f.name||('local-'+Date.now())).replace(/[^a-z0-9-_\.]/ig,'-');
-          saveGameContentEntry(id, txt, {name: name||f.name, desc});
+          // If user opted to try to save to cookies, attempt cookies first (may fall back to localStorage)
+          const tryCookie = document.getElementById('add-game-save-cookie') && document.getElementById('add-game-save-cookie').checked;
+          if(tryCookie){
+            const key = `gs_game_${id}`;
+            try{
+              setCookie(key, txt, 365);
+              try{ localStorage.setItem(`gs_game_meta_${id}`, JSON.stringify({name: name||f.name, desc})); }catch(e){}
+              alert(`Saved to cookie as ${key}`);
+            }catch(e){
+              // fallback to content storage
+              saveGameContentEntry(id, txt, {name: name||f.name, desc});
+            }
+          }else{
+            saveGameContentEntry(id, txt, {name: name||f.name, desc});
+          }
           const game = {id, name: name||f.name, description: desc, content: txt};
           const card = createCard(game); listEl.insertBefore(card, listEl.firstChild);
           alert('Game added to downloaded games.'); hideAddModal(); return;
@@ -1020,7 +1070,20 @@
             const txt = await fileG.files[0].text();
             const arr = JSON.parse(txt);
             renderGames(arr);
-            try{ localStorage.setItem('gs_gamelist', txt); alert('Gamelist loaded from file and saved locally.'); }catch(e){}
+            // respect user's choice to try saving gamelist into cookies
+            const tryCookie = document.getElementById('add-gamelist-save-cookie') && document.getElementById('add-gamelist-save-cookie').checked;
+            try{
+              if(tryCookie){
+                // cookies may be too small; attempt and fall back
+                setCookie('gs_gamelist', txt, 365);
+                alert('Gamelist saved to cookie (if it fits).');
+              }else{
+                localStorage.setItem('gs_gamelist', txt);
+                alert('Gamelist loaded from file and saved locally.');
+              }
+            }catch(e){
+              try{ localStorage.setItem('gs_gamelist', txt); alert('Gamelist saved locally (cookie failed).'); }catch(er){}
+            }
             hideAddModal(); return;
           }catch(e){ alert('Failed to read/parse file: '+e.message); return; }
         }
@@ -1117,7 +1180,12 @@
 
       const gToggle = document.getElementById('gamelists-toggle');
       const gList = document.getElementById('gamelists-list');
-      if(gToggle && gList) gToggle.addEventListener('click', ()=>{ gList.style.display = gList.style.display === 'block' ? 'none' : 'block'; });
+      if(gToggle && gList) gToggle.addEventListener('click', ()=>{ 
+        const open = gList.style.display !== 'block';
+        gList.style.display = open ? 'block' : 'none';
+        // also show the Gamelists page so users can interact with saved sources
+        if(open) switchPage('gamelists');
+      });
 
       const gAdd = document.getElementById('gamelists-add');
       if(gAdd) gAdd.addEventListener('click', ()=>{ showAddModal(); });
