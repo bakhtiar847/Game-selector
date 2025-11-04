@@ -73,6 +73,51 @@
     </div>
   </aside>
 
+  <!-- Add / Upload modal: left = single game (file or URL), right = gamelist (file or URL) -->
+  <div id="add-modal" style="display:none;position:fixed;inset:0;background:rgba(2,6,23,0.7);align-items:center;justify-content:center;z-index:90">
+    <div style="background:var(--card);padding:18px;border-radius:12px;max-width:980px;width:96%;box-shadow:0 12px 48px rgba(2,6,23,0.6);display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div style="padding:12px;">
+        <h3 style="margin:0 0 8px 0">Add a single game</h3>
+        <p style="margin:0 0 8px;color:var(--muted)">Upload an HTML file or give a URL to an HTML page. You can save the file/URL to cookies so it appears in Downloaded games.</p>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <label style="font-size:13px">Name <input id="add-game-name" placeholder="Optional display name" style="width:100%;padding:8px;border-radius:6px"></label>
+          <label style="font-size:13px">Description <input id="add-game-desc" placeholder="Optional description" style="width:100%;padding:8px;border-radius:6px"></label>
+          <div>
+            <input id="add-game-file" type="file" accept="text/html" />
+          </div>
+          <label style="font-size:13px"><input id="add-game-save-cookie" type="checkbox"> Try to save file to cookies (falls back to localStorage)</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input id="add-game-url" placeholder="https://example.com/game.html" style="flex:1;padding:8px;border-radius:6px">
+            <label style="display:flex;align-items:center;gap:6px"><input id="add-game-save-url" type="checkbox"> Save URL</label>
+          </div>
+          <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button id="add-game-cancel" class="open">Cancel</button>
+            <button id="add-game-submit" class="play">Add Game</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="padding:12px;border-left:1px solid rgba(255,255,255,0.03)">
+        <h3 style="margin:0 0 8px 0">Add a gamelist.json</h3>
+        <p style="margin:0 0 8px;color:var(--muted)">Upload a gamelist.json file or provide a URL to a gamelist.json. When added it will populate the main list. Optionally save the URL to persist across visits.</p>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div>
+            <input id="add-gamelist-file" type="file" accept="application/json">
+          </div>
+          <label style="font-size:13px"><input id="add-gamelist-save-cookie" type="checkbox"> Try to save gamelist to cookies (may fail for large files)</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input id="add-gamelist-url" placeholder="https://example.com/gamelist.json" style="flex:1;padding:8px;border-radius:6px">
+            <label style="display:flex;align-items:center;gap:6px"><input id="add-gamelist-save-url" type="checkbox"> Save URL</label>
+          </div>
+          <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button id="add-gamelist-cancel" class="open">Cancel</button>
+            <button id="add-gamelist-submit" class="play">Add Gamelist</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- main content shifted to the right to allow for sidebar -->
 
   <!-- Username modal -->
@@ -170,51 +215,6 @@
         </div>
       </div>
       <div style="display:flex;gap:20px;align-items:center">
-
-        <!-- Add / Upload modal: left = single game (file or URL), right = gamelist (file or URL) -->
-        <div id="add-modal" style="display:none;position:fixed;inset:0;background:rgba(2,6,23,0.7);align-items:center;justify-content:center;z-index:90">
-          <div style="background:var(--card);padding:18px;border-radius:12px;max-width:980px;width:96%;box-shadow:0 12px 48px rgba(2,6,23,0.6);display:grid;grid-template-columns:1fr 1fr;gap:12px">
-            <div style="padding:12px;">
-              <h3 style="margin:0 0 8px 0">Add a single game</h3>
-              <p style="margin:0 0 8px;color:var(--muted)">Upload an HTML file or give a URL to an HTML page. You can save the file/URL to cookies so it appears in Downloaded games.</p>
-              <div style="display:flex;flex-direction:column;gap:8px">
-                <label style="font-size:13px">Name <input id="add-game-name" placeholder="Optional display name" style="width:100%;padding:8px;border-radius:6px"></label>
-                <label style="font-size:13px">Description <input id="add-game-desc" placeholder="Optional description" style="width:100%;padding:8px;border-radius:6px"></label>
-                <div>
-                  <input id="add-game-file" type="file" accept="text/html" />
-                </div>
-                <label style="font-size:13px"><input id="add-game-save-cookie" type="checkbox"> Try to save file to cookies (falls back to localStorage)</label>
-                <div style="display:flex;gap:8px;align-items:center">
-                  <input id="add-game-url" placeholder="https://example.com/game.html" style="flex:1;padding:8px;border-radius:6px">
-                  <label style="display:flex;align-items:center;gap:6px"><input id="add-game-save-url" type="checkbox"> Save URL</label>
-                </div>
-                <div style="display:flex;gap:8px;justify-content:flex-end">
-                  <button id="add-game-cancel" class="open">Cancel</button>
-                  <button id="add-game-submit" class="play">Add Game</button>
-                </div>
-              </div>
-            </div>
-
-            <div style="padding:12px;border-left:1px solid rgba(255,255,255,0.03)">
-              <h3 style="margin:0 0 8px 0">Add a gamelist.json</h3>
-              <p style="margin:0 0 8px;color:var(--muted)">Upload a gamelist.json file or provide a URL to a gamelist.json. When added it will populate the main list. Optionally save the URL to persist across visits.</p>
-              <div style="display:flex;flex-direction:column;gap:8px">
-                <div>
-                  <input id="add-gamelist-file" type="file" accept="application/json">
-                </div>
-                <label style="font-size:13px"><input id="add-gamelist-save-cookie" type="checkbox"> Try to save gamelist to cookies (may fail for large files)</label>
-                <div style="display:flex;gap:8px;align-items:center">
-                  <input id="add-gamelist-url" placeholder="https://example.com/gamelist.json" style="flex:1;padding:8px;border-radius:6px">
-                  <label style="display:flex;align-items:center;gap:6px"><input id="add-gamelist-save-url" type="checkbox"> Save URL</label>
-                </div>
-                <div style="display:flex;gap:8px;justify-content:flex-end">
-                  <button id="add-gamelist-cancel" class="open">Cancel</button>
-                  <button id="add-gamelist-submit" class="play">Add Gamelist</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
         <canvas id="mp-canvas" width="800" height="360" style="background:#02121a;border-radius:8px;width:100%;height:360px;display:block"></canvas>
       </div>
     </div>
@@ -340,7 +340,7 @@
   const initialButton = isSavedInCookie(game.id) ? makeDeleteButton() : makeSaveButton();
   menu.appendChild(openNew); menu.appendChild(dl); menu.appendChild(initialButton);
   menuWrap.appendChild(menuBtn); menuWrap.appendChild(menu);
-  menuBtn.addEventListener('click', ()=>{ menu.style.display = menu.style.display === 'block' ? 'none' : 'block'; });
+  menuBtn.addEventListener('click', (e)=>{ e.stopPropagation(); menu.style.display = menu.style.display === 'block' ? 'none' : 'block'; });
   // (removed per-card document listener) menu closing is handled by a single global handler added below
 
   controls.appendChild(play); controls.appendChild(menuWrap);
