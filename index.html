@@ -341,8 +341,7 @@
   menu.appendChild(openNew); menu.appendChild(dl); menu.appendChild(initialButton);
   menuWrap.appendChild(menuBtn); menuWrap.appendChild(menu);
   menuBtn.addEventListener('click', ()=>{ menu.style.display = menu.style.display === 'block' ? 'none' : 'block'; });
-  // close menus when clicking outside
-  document.addEventListener('click', (e)=>{ if(!menuWrap.contains(e.target)) menu.style.display='none'; });
+  // (removed per-card document listener) menu closing is handled by a single global handler added below
 
   controls.appendChild(play); controls.appendChild(menuWrap);
       wrap.appendChild(controls);
@@ -935,6 +934,15 @@
         try{ sendSigned(msg); }catch(e){ /* if no connection, ignore or optionally queue */ }
       }catch(e){ console.error('gameBC onmessage', e); }
     };
+
+    // Global handler: close any open card menus when clicking outside of a menu or its button.
+    // This centralizes the logic and avoids per-card listeners which were interfering with collapse behavior.
+    document.addEventListener('click', (e)=>{
+      // if click inside a menu or on a menu button, don't close
+      if(e.target.closest && (e.target.closest('.menu') || e.target.closest('.menu-btn'))) return;
+      const openMenus = document.querySelectorAll('.menu');
+      openMenus.forEach(m=>{ if(m.style.display === 'block') m.style.display = 'none'; });
+    });
 
     // Chat handling
     function appendChatMessage(name, text){
