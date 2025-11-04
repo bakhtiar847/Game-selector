@@ -242,8 +242,17 @@
       // if a saved version exists in cookie/localStorage, load it and mark the card
       const saved = loadSavedGame(game.id);
       if(saved){
-        // replace content so Play uses the saved offline version
-        game.content = saved;
+        // saved may be a string (e.g., 'URL:...') or a parsed entry object
+        if(typeof saved === 'object'){
+          // prefer saved.content or saved.url
+          if(saved.content) game.content = saved.content;
+          else if(saved.url) game.content = { url: saved.url };
+          else game.content = saved;
+          // if saved entry provides a name/description, prefer those for display
+          if(saved.name) h.textContent = saved.name;
+        }else{
+          game.content = saved;
+        }
         const badge = document.createElement('span'); badge.className = 'badge-saved'; badge.textContent = 'Saved offline';
         h.appendChild(badge);
       }
@@ -500,36 +509,48 @@
       }
     })();
 
-    // Save game HTML to cookie if small enough, otherwise fall back to localStorage.
+    // Save a full game entry (JSON) to cookie if small enough, otherwise fall back to localStorage.
+    // We store the entire entry as JSON so metadata (name/description/content/url) is preserved.
     function saveGameToCookie(game){
       const key = `gs_game_${game.id}`;
-      const payload = game.content || '';
+      // ensure we store a JSON string
+      const entry = (typeof game === 'string') ? { id: game } : Object.assign({}, game);
+      const payload = JSON.stringify(entry);
       // rough safe cookie size limit (per-cookie) — browsers vary; use 4000 bytes as safe cap
       const encoder = new TextEncoder();
       const bytes = encoder.encode(payload).length;
       if(bytes <= 4000){
         try{
           setCookie(key, payload, 365);
-          alert(`Saved to cookie as ${key} (${bytes} bytes)`);
+          alert(`Saved entry to cookie as ${key} (${bytes} bytes)`);
           return;
         }catch(e){
           console.warn('cookie set failed', e);
         }
       }
-      // fallback to localStorage
+      // fallback to localStorage (store the JSON string)
       try{
         localStorage.setItem(key, payload);
-        alert(`Saved to localStorage as ${key} (${bytes} bytes). Cookie was too small.`);
+        alert(`Saved entry to localStorage as ${key} (${bytes} bytes). Cookie was too small or blocked.`);
       }catch(e){
-        alert('Failed to save game: storage unavailable or payload too large.');
+        alert('Failed to save game entry: storage unavailable or payload too large.');
         console.error(e);
       }
     }
 
-    // load saved game (from cookie or localStorage)
+    // load saved game entry (from cookie or localStorage)
+    // returns either a parsed object (the original entry) or a raw string (e.g., 'URL:...')
     function loadSavedGame(id){
       const key = `gs_game_${id}`;
-      return getCookie(key) || localStorage.getItem(key) || null;
+      const raw = getCookie(key) || localStorage.getItem(key) || null;
+      if(!raw) return null;
+      if(typeof raw === 'string'){
+        const t = raw.trim();
+        if((t.startsWith('{') || t.startsWith('['))){
+          try{ return JSON.parse(raw); }catch(e){ /* not JSON, fall through */ }
+        }
+      }
+      return raw;
     }
 
     // --- Web Crypto helpers for optional password encryption ---
@@ -941,9 +962,14 @@
 
     function saveGameContentEntry(id, content, meta){
       const key = `gs_game_${id}`;
+      // build a full entry object that preserves meta
+      const entry = { id, content };
+      if(meta){ entry.name = meta.name || entry.name; entry.description = meta.desc || meta.description || entry.description; }
       try{
-        // try using cookie helper which falls back to localStorage
-        saveGameToCookie({id, content});
+        // use the JSON-saving helper which will try cookies then localStorage
+        saveGameToCookie(entry);
+        // also keep a separate meta object for quick access if provided
+        if(meta) try{ localStorage.setItem(`gs_game_meta_${id}`, JSON.stringify(meta)); }catch(e){}
       }catch(e){
         try{ localStorage.setItem(key, content); if(meta) localStorage.setItem(`gs_game_meta_${id}`, JSON.stringify(meta)); }catch(er){ console.error('save fallback',er); }
       }
@@ -958,7 +984,10 @@
           if(k.startsWith('gs_game_meta_')) continue;
           if(k.startsWith('gs_game_')){
             const id = k.replace(/^gs_game_/,'');
-            found[id] = {id, raw: localStorage.getItem(k)};
+            let raw = localStorage.getItem(k);
+            // try parse JSON entries that were stored as full objects
+            try{ if(typeof raw === 'string'){ const t = raw.trim(); if(t.startsWith('{')||t.startsWith('[')) raw = JSON.parse(raw); } }catch(e){}
+            found[id] = {id, raw: raw};
             const m = localStorage.getItem(`gs_game_meta_${id}`);
             if(m) try{ found[id].meta = JSON.parse(m); }catch(e){}
           }
@@ -969,7 +998,10 @@
         raw.forEach(p=>{
           const idx = p.indexOf('='); if(idx===-1) return; const key = decodeURIComponent(p.slice(0,idx)); const val = decodeURIComponent(p.slice(idx+1)||'');
           if(key.startsWith('gs_game_')){
-            const id = key.replace(/^gs_game_/,''); if(!found[id]) found[id] = {id, raw: val};
+            const id = key.replace(/^gs_game_/,'');
+            let parsed = val;
+            try{ const t = (val||'').trim(); if(t.startsWith('{')||t.startsWith('[')) parsed = JSON.parse(val); }catch(e){}
+            if(!found[id]) found[id] = {id, raw: parsed};
           }
         });
       }catch(e){ }
@@ -987,11 +1019,22 @@
       listEl.innerHTML = '';
       if(arr.length===0){ listEl.innerHTML = '<div class="empty">No downloaded games saved.</div>'; return; }
       arr.forEach(item=>{
-        const name = (item.meta && item.meta.name) || item.id;
-        const desc = (item.meta && item.meta.desc) || '';
-        const game = { id: item.id, name, description: desc };
-        if(typeof item.value === 'string' && item.value.startsWith('URL:')) game.content = { url: item.value.replace(/^URL:/,'') };
-        else game.content = item.value || '';
+        // item.value may be a parsed object (entry) or a string like 'URL:...'
+        let name = (item.meta && item.meta.name) || item.id;
+        let desc = (item.meta && item.meta.desc) || '';
+        let content = '';
+        if(item.value && typeof item.value === 'object'){
+          // full entry stored as JSON
+          if(item.value.name) name = item.value.name;
+          if(item.value.description) desc = item.value.description;
+          if(item.value.content) content = item.value.content;
+          else if(item.value.url) content = { url: item.value.url };
+        }else if(typeof item.value === 'string' && item.value.startsWith('URL:')){
+          content = { url: item.value.replace(/^URL:/,'') };
+        }else{
+          content = item.value || '';
+        }
+        const game = { id: item.id, name, description: desc, content };
         const card = createCard(game);
         listEl.appendChild(card);
       });
