@@ -52,5 +52,11 @@
         "license": "CC0"
       },
       "tags": ["racing", "external"]
+    },
+    {
+      "id": "game-9",
+      "name": "Trivia Game (URL)",
+      "description": "A simple trivia game hosted externally.",
+      "url": "https://bakhtiar847.github.io/Trivia/index.html"
     }
 ]

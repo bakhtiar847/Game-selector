@@ -137,6 +137,13 @@
 
   <main id="main-content" style="padding:28px;max-width:900px;margin:0 auto;">
     <div id="page-all" style="display:block">
+      <!-- Filter bar: appears directly above the games list -->
+      <div id="filter-bar" style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <label for="tagFilter" style="color:var(--muted);font-size:13px;margin-right:6px">Tag:</label>
+        <select id="tagFilter"><option value="__all__">All</option></select>
+        <div id="matchesInfo" style="margin-left:auto;color:var(--muted);font-size:13px"></div>
+      </div>
+
       <div id="list">
         <div class="empty">Loading games…</div>
       </div>
@@ -421,6 +428,57 @@
       }catch(e){ console.error('renderGames failed', e); listEl.innerHTML = '<div class="empty">Failed to render games.</div>'; }
     }
 
+    // --- Tag filter helpers ---
+    function extractTags(item){
+      if(!item) return [];
+      const t = item.tag ?? item.tags ?? null;
+      if(!t) return [];
+      if(Array.isArray(t)) return t.map(String).map(s=>s.trim()).filter(Boolean);
+      if(typeof t === 'string') return t.split(',').map(s=>s.trim()).filter(Boolean);
+      return [String(t)];
+    }
+
+    function getUniqueTags(arr){
+      const s = new Set();
+      (arr||[]).forEach(g=> extractTags(g).forEach(t=> s.add(t)));
+      return Array.from(s).sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:'base'}));
+    }
+
+    function populateTagDropdown(arr){
+      const sel = document.getElementById('tagFilter'); if(!sel) return;
+      const cur = sel.value || '__all__';
+      sel.innerHTML = '<option value="__all__">All</option>';
+      const tags = getUniqueTags(arr);
+      tags.forEach(t=>{ const o = document.createElement('option'); o.value = t; o.textContent = t; sel.appendChild(o); });
+      if(Array.from(sel.options).some(o=>o.value===cur)) sel.value = cur;
+    }
+
+    function filterGamesByTag(arr, tag){
+      if(!arr) return [];
+      if(!tag || tag === '__all__') return arr;
+      const tLower = String(tag).toLowerCase();
+      return arr.filter(g=> extractTags(g).some(tt=> tt.toLowerCase() === tLower));
+    }
+
+    function showGamesWithFilter(arr){
+      window.__GS_GAMES = arr || [];
+      const sel = document.getElementById('tagFilter');
+      if(!sel){ renderGames(arr); return; }
+      populateTagDropdown(window.__GS_GAMES);
+      if(!sel.__filterAttached){
+        sel.addEventListener('change', ()=>{
+          const filtered = filterGamesByTag(window.__GS_GAMES, sel.value);
+          renderGames(filtered);
+          const info = document.getElementById('matchesInfo'); if(info) info.textContent = filtered.length + ' / ' + (window.__GS_GAMES.length||0) + ' shown';
+        });
+        sel.__filterAttached = true;
+      }
+      // trigger initial render and info update
+      const initial = filterGamesByTag(window.__GS_GAMES, sel.value);
+      renderGames(initial);
+      const info = document.getElementById('matchesInfo'); if(info) info.textContent = initial.length + ' / ' + (window.__GS_GAMES.length||0) + ' shown';
+    }
+
     // Simple page navigation helper
     function switchPage(page){
       const pages = ['all','gamelists','downloaded','settings'];
@@ -434,9 +492,9 @@
         // built-in
         const built = document.createElement('div'); built.textContent = 'Built-in: gamelist.json'; const loadBuilt = document.createElement('button'); loadBuilt.className='open'; loadBuilt.textContent='Load'; loadBuilt.addEventListener('click', ()=>{ load(); switchPage('all'); }); built.appendChild(loadBuilt); container.appendChild(built);
         // local saved
-        try{ const saved = localStorage.getItem('gs_gamelist'); if(saved){ const d=document.createElement('div'); d.textContent='Local saved gamelist'; const bt=document.createElement('button'); bt.className='open'; bt.textContent='Load'; bt.addEventListener('click', ()=>{ renderGames(JSON.parse(saved)); switchPage('all'); }); d.appendChild(bt); container.appendChild(d); } }catch(e){}
+  try{ const saved = localStorage.getItem('gs_gamelist'); if(saved){ const d=document.createElement('div'); d.textContent='Local saved gamelist'; const bt=document.createElement('button'); bt.className='open'; bt.textContent='Load'; bt.addEventListener('click', ()=>{ showGamesWithFilter(JSON.parse(saved)); switchPage('all'); }); d.appendChild(bt); container.appendChild(d); } }catch(e){}
         // saved URL
-        try{ const u = localStorage.getItem('gs_gamelist_url') || getCookie('gs_gamelist_url'); if(u){ const d=document.createElement('div'); d.textContent = 'Saved URL: '+u; const bt=document.createElement('button'); bt.className='open'; bt.textContent='Load'; bt.addEventListener('click', async ()=>{ try{ const r = await fetch(u); const arr = await r.json(); renderGames(arr); switchPage('all'); }catch(e){ alert('Failed to fetch saved gamelist URL: '+e.message); } }); d.appendChild(bt); container.appendChild(d); } }catch(e){}
+  try{ const u = localStorage.getItem('gs_gamelist_url') || getCookie('gs_gamelist_url'); if(u){ const d=document.createElement('div'); d.textContent = 'Saved URL: '+u; const bt=document.createElement('button'); bt.className='open'; bt.textContent='Load'; bt.addEventListener('click', async ()=>{ try{ const r = await fetch(u); const arr = await r.json(); showGamesWithFilter(arr); switchPage('all'); }catch(e){ alert('Failed to fetch saved gamelist URL: '+e.message); } }); d.appendChild(bt); container.appendChild(d); } }catch(e){}
       }
       if(page==='downloaded'){
         // render into downloaded-list
@@ -1165,7 +1223,7 @@
           try{
             const txt = await fileG.files[0].text();
             const arr = JSON.parse(txt);
-            renderGames(arr);
+            showGamesWithFilter(arr);
             // respect user's choice to try saving gamelist into cookies
             const tryCookie = document.getElementById('add-gamelist-save-cookie') && document.getElementById('add-gamelist-save-cookie').checked;
             try{
@@ -1189,7 +1247,7 @@
             const res = await fetch(u, {cache:'no-store'});
             if(!res.ok) throw new Error('HTTP '+res.status);
             const arr = await res.json();
-            renderGames(arr);
+            showGamesWithFilter(arr);
             if(saveGcb.checked){ try{ localStorage.setItem('gs_gamelist_url', u); setCookie('gs_gamelist_url', u, 365); }catch(e){} }
             hideAddModal(); alert('Gamelist loaded from URL.'); return;
           }catch(e){ alert('Failed to fetch gamelist URL: '+e.message); }
@@ -1202,20 +1260,20 @@
       try{
         const res = await fetch('gamelist.json', {cache: 'no-store'});
         if(!res.ok) throw new Error('HTTP '+res.status);
-        const arr = await res.json();
-        renderGames(arr);
+  const arr = await res.json();
+  showGamesWithFilter(arr);
         return;
       }catch(err){
         console.warn('gamelist.json fetch failed:', err && err.message);
         // try saved gamelist JSON in localStorage
         try{
           const saved = localStorage.getItem('gs_gamelist');
-          if(saved){ const arr = JSON.parse(saved); renderGames(arr); return; }
+          if(saved){ const arr = JSON.parse(saved); showGamesWithFilter(arr); return; }
         }catch(e){ console.error('failed to parse saved gamelist', e); }
         // try saved gamelist URL
         try{
           const u = localStorage.getItem('gs_gamelist_url') || getCookie('gs_gamelist_url');
-          if(u){ const r = await fetch(u, {cache:'no-store'}); if(r.ok){ const arr = await r.json(); renderGames(arr); return; } }
+          if(u){ const r = await fetch(u, {cache:'no-store'}); if(r.ok){ const arr = await r.json(); showGamesWithFilter(arr); return; } }
         }catch(e){ console.error('failed to load saved gamelist url', e); }
 
         // no fallback available — show message with option to add
