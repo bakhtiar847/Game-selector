@@ -39,12 +39,18 @@
       "id": "game-7",
       "name": "External Sample (URL)",
       "description": "An entry that references a game by URL instead of embedding full HTML.",
-      "url": "https://example.com/"
+      "url": "https://example.com/",
+      "tags": ["external", "sample"]
     },
     {
       "id": "game-8",
       "name": "Race Game (URL)",
       "description": "A simple racing game hosted externally.",
-      "url": "https://bakhtiar847.github.io/Race-Game/index.html"
+      "url": "https://bakhtiar847.github.io/Race-Game/index.html",
+      "metadata": {
+        "author": "Bakhtiar847",
+        "license": "CC0"
+      },
+      "tags": ["racing", "external"]
     }
 ]
